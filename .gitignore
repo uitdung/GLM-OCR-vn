@@ -177,4 +177,6 @@ data/
 *.pid
 .DS_Store
 
-tools/dataset/vietnamese_ocr/
+tools/dataset/*/images/
+vietnamese_ocr_augmented/
+vietnamese_ocr_clean/
