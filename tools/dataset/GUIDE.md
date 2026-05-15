@@ -11,9 +11,10 @@ Flow hoàn chỉnh từ sinh data → train → test local.
 3. [Fine-tune trên Google Colab](#3-fine-tune-trên-google-colab)
 4. [Test local](#4-test-local)
 5. [So sánh original vs finetuned](#5-so-sánh-original-vs-finetuned)
-6. [Cấu hình training](#6-cấu-hình-training)
-7. [Chi tiết dataset](#7-chi-tiết-dataset)
-8. [Troubleshooting](#8-troubleshooting)
+6. [Dùng qua Ollama](#6-dùng-qua-ollama)
+7. [Cấu hình training](#7-cấu-hình-training)
+8. [Chi tiết dataset](#8-chi-tiết-dataset)
+9. [Troubleshooting](#9-troubleshooting)
 
 ---
 
@@ -248,7 +249,74 @@ Output mẫu:
 
 ---
 
-## 6. Cấu hình training
+## 6. Dùng qua Ollama
+
+Chạy model finetuned qua Ollama — nhanh, tiện, không cần code.
+
+### Tạo model Ollama
+
+```bash
+# Copy preprocessor_config.json (Ollama cần file này)
+cp glm-ocr-vn/processor_config.json glm-ocr-vn/preprocessor_config.json
+
+# Tạo model (chạy từ trong thư mục model)
+cd glm-ocr-vn && ollama create glm-ocr-vn -f Modelfile
+```
+
+### Test qua API
+
+```bash
+# Chạy inference qua Ollama API
+python -c "
+import base64, json, requests
+img_b64 = base64.b64encode(open('test.png', 'rb').read()).decode()
+resp = requests.post('http://localhost:11434/api/generate', json={
+    'model': 'glm-ocr-vn',
+    'prompt': 'Text Recognition:',
+    'images': [img_b64],
+    'stream': False,
+})
+print(resp.json()['response'])
+"
+```
+
+### Test qua Python script
+
+```bash
+pip install glmocr
+```
+
+Tạo `config.yaml`:
+```yaml
+pipeline:
+  ocr_api:
+    api_host: localhost
+    api_port: 11434
+    api_path: /api/generate
+    model: glm-ocr-vn
+    api_mode: ollama_generate
+```
+
+```bash
+glmocr parse test.png --config config.yaml
+```
+
+### Quản lý model
+
+```bash
+# Xem danh sách model
+ollama list
+
+# Xem chi tiết
+ollama show glm-ocr-vn
+
+# Xóa model
+ollama rm glm-ocr-vn
+```
+
+---
+
+## 7. Cấu hình training
 
 ### Scheduler: `constant_with_warmup`
 
@@ -277,7 +345,7 @@ LR
 
 ---
 
-## 7. Chi tiết dataset
+## 8. Chi tiết dataset
 
 ### Word list
 
@@ -311,7 +379,7 @@ vietnam-dict-words.txt (36,534 từ)
 
 ---
 
-## 8. Troubleshooting
+## 9. Troubleshooting
 
 ### `ValueError: image has wrong mode` khi gen data
 
