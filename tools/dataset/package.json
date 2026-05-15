@@ -14,5 +14,17 @@
     "build:big": "npm run gen:big && npm run zip",
     "test:image": "python test_local.py",
     "test:compare": "python compare_models.py"
+  },
+  "_docs": {
+    "test:fonts": "Test font hệ thống có hỗ trợ dấu tiếng Việt",
+    "gen": "Sinh dataset mặc định (2000 ảnh). Params: --num_samples, --augment_copies, --test_ratio, --output_dir, --seed, --no_augment",
+    "gen:clean": "Sinh ảnh sạch không augmentation",
+    "gen:big": "Sinh 20K gốc × 3 copies = 60K samples, 10% test",
+    "zip": "Nén thư mục vietnamese_ocr thành zip (upload Drive)",
+    "build": "gen mặc định + zip",
+    "build:clean": "gen sạch + zip",
+    "build:big": "gen lớn + zip",
+    "test:image": "Inference local. Params: --model_path (bắt buộc), --image (bắt buộc, nhận file/thư mục/nhiều file), --task (text|table|formula), --show_image",
+    "test:compare": "So sánh original vs finetuned. Params: --ft_path (mặc định ./glm-ocr-vn), --test_json (mặc định ./vietnamese_ocr/vietnamese_ocr_test.json), --n (số ảnh test, 0=tất cả, mặc định 0)"
   }
 }

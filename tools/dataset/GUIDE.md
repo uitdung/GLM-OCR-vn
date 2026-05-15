@@ -157,32 +157,29 @@ val_size: 0.0                              # Dùng test set riêng thay vì val 
 
 Sau khi train xong, tải thư mục model từ Drive (`glm-ocr-vn`) về máy.
 
-### Test 1 ảnh
+### Tham số `test_local.py`
+
+| Tham số | Mặc định | Mô tả |
+|---|---|---|
+| `--model_path` | *(bắt buộc)* | Đường dẫn đến model đã merge |
+| `--image` | *(bắt buộc)* | File ảnh, thư mục, hoặc nhiều file |
+| `--task` | `text` | Loại OCR: `text`, `table`, `formula` |
+| `--show_image` | off | Hiển thị ảnh (cần GUI) |
+
+### Ví dụ
 
 ```bash
-python test_local.py --model_path ./glm-ocr-vn --image test.png
-```
+# Test 1 ảnh
+npm run test:image -- --model_path ./glm-ocr-vn --image test.png
 
-### Test nhiều ảnh
+# Test nhiều ảnh
+npm run test:image -- --model_path ./glm-ocr-vn --image img1.png img2.png img3.png
 
-```bash
-python test_local.py --model_path ./glm-ocr-vn --image img1.png img2.png img3.png
-```
+# Test toàn bộ thư mục
+npm run test:image -- --model_path ./glm-ocr-vn --image ./test_images/
 
-### Test toàn bộ thư mục
-
-```bash
-python test_local.py --model_path ./glm-ocr-vn --image ./test_images/
-```
-
-### Đổi loại task
-
-```bash
-# Nhận diện bảng
-python test_local.py --model_path ./glm-ocr-vn --image table.png --task table
-
-# Nhận diện công thức toán
-python test_local.py --model_path ./glm-ocr-vn --image formula.png --task formula
+# Đổi loại task
+npm run test:image -- --model_path ./glm-ocr-vn --image table.png --task table
 ```
 
 ### Yêu cầu
@@ -195,25 +192,57 @@ python test_local.py --model_path ./glm-ocr-vn --image formula.png --task formul
 
 ## 5. So sánh original vs finetuned
 
-Chạy trên cùng test set để xem fine-tune cải thiện bao nhiêu:
+Chạy trên test set để xem fine-tune cải thiện bao nhiêu.
+
+### Tham số `compare_models.py`
+
+| Tham số | Mặc định | Mô tả |
+|---|---|---|
+| `--ft_path` | `./glm-ocr-vn` | Đường dẫn model finetuned |
+| `--test_json` | `./vietnamese_ocr/vietnamese_ocr_test.json` | File test set JSON |
+| `--n` | `0` | Số ảnh test. `0` = tất cả, `5` = nhanh |
+
+### Ví dụ
 
 ```bash
-python compare_models.py
+# Test toàn bộ test set (chính xác nhất, chậm)
+npm run test:compare
+
+# Test nhanh 5 ảnh (seed=42 cố định, tái lập được)
+npm run test:compare -- --n 5
+
+# Test 100 ảnh
+npm run test:compare -- --n 100
+
+# Chỉ định model và test set khác
+npm run test:compare -- --ft_path ./my-model --test_json ./data/test.json
 ```
 
 Script tự động:
 1. Download model gốc từ HuggingFace (`zai-org/GLM-OCR`) nếu chưa có
-2. Load model finetuned từ `./glm-ocr-vn/`
-3. Chạy inference trên 5 ảnh từ test set
-4. Hiển thị so sánh từng ảnh + tổng kết
+2. Load model finetuned từ `--ft_path`
+3. Chạy inference trên N ảnh từ test set
+4. Hiển thị so sánh + bảng diacritic accuracy theo nhóm dấu
 
 Output mẫu:
 ```
 ============================================================
   Metric                 Original    Finetuned        Δ
 ============================================================
-  Word Acc                 18.8%       87.5%   +68.8%
-  Char Acc                 67.2%       97.3%   +30.2%
+  Word Acc                 26.8%       87.8%   +61.0%
+  Char Acc                 77.3%       97.4%   +20.1%
+
+  Diacritic Acc (FT)       84.2%  (32/38)
+
+  Nhóm dấu               Accuracy     Chi tiết
+  ──────────────────── ────────── ────────────
+  ă (ắằẳẵặ)                100.0%  (3/3)
+  â (ấầẩẫậ)                100.0%  (4/4)
+  ê (ếềểễệ)                 77.8%  (7/9)
+  ô (ốồổỗộ)                 77.8%  (7/9)
+  ơ (ớờởỡợ)                 83.3%  (5/6)
+  ư (ứừửữự)                100.0%  (5/5)
+  đ                         50.0%  (1/2)
 ============================================================
 ```
 
