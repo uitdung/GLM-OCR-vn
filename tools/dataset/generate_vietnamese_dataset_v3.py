@@ -13,7 +13,7 @@ Cách dùng:
     python generate_vietnamese_dataset_v3.py --num_samples 10000 --augment_copies 3
 """
 
-import os, json, random, argparse, io
+import os, json, random, argparse, io, math
 from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter, ImageEnhance
 import numpy as np
@@ -125,6 +125,20 @@ def render(text, fp, fs=24, bg=(255,255,255), tc=(0,0,0), pad=25, ls=8):
 # AUGMENTATION
 # ============================================================================
 
+def _perspective_coeffs(src_pts, dst_pts):
+    """Compute 8 perspective transform coefficients for PIL Image.transform.
+    Maps dst_pts -> src_pts."""
+    matrix = []
+    result = []
+    for (sx, sy), (dx, dy) in zip(src_pts, dst_pts):
+        matrix.append([dx, dy, 1, 0, 0, 0, -dx * sx, -dy * sx])
+        result.append(sx)
+        matrix.append([0, 0, 0, dx, dy, 1, -dx * sy, -dy * sy])
+        result.append(sy)
+    coeffs = np.linalg.solve(np.array(matrix, dtype=np.float64), np.array(result, dtype=np.float64))
+    return coeffs.tolist()
+
+
 def augment(img, allow_none=True):
     """Augmentation cho OCR van ban - gia lap anh chuc thuc te."""
     choices = [
@@ -136,6 +150,10 @@ def augment(img, allow_none=True):
         "rotate",
         "shadow",
         "glare",
+        "perspective",
+        "downscale",
+        "wave",
+        "elastic",
     ]
     if not allow_none:
         choices = [c for c in choices if c != "none"]
@@ -181,6 +199,62 @@ def augment(img, allow_none=True):
             brightness = random.randint(30, 80)
             arr[y1:y2, x1:x2] = np.clip(arr[y1:y2, x1:x2].astype(int) + brightness, 0, 255).astype(np.uint8)
         img = Image.fromarray(arr)
+    elif a == "perspective":
+        w, h = img.size
+        offset = min(w, h) * random.uniform(0.02, 0.06)
+        src_corners = [(0, 0), (w, 0), (w, h), (0, h)]
+        dst_corners = [
+            (random.uniform(0, offset), random.uniform(0, offset)),
+            (w - random.uniform(0, offset), random.uniform(0, offset)),
+            (w - random.uniform(0, offset), h - random.uniform(0, offset)),
+            (random.uniform(0, offset), h - random.uniform(0, offset)),
+        ]
+        coeffs = _perspective_coeffs(src_corners, dst_corners)
+        img = img.transform((w, h), Image.PERSPECTIVE, coeffs, Image.BICUBIC, fillcolor=(255, 255, 255))
+    elif a == "downscale":
+        w, h = img.size
+        scale = random.uniform(0.25, 0.6)
+        small = img.resize((max(int(w * scale), 16), max(int(h * scale), 16)), Image.BILINEAR)
+        img = small.resize((w, h), Image.BILINEAR)
+    elif a == "wave":
+        # Mô phỏng chữ trên trang sách bị cong — dịch chuyển dạng sóng sin
+        w, h = img.size
+        arr = np.array(img)
+        result = np.full_like(arr, 255)  # nền trắng
+        amplitude = random.uniform(2, 12)  # độ lệch pixel
+        freq = random.uniform(0.8, 2.0)   # số vòng sóng
+        for y in range(h):
+            dx = int(amplitude * math.sin(2 * math.pi * freq * y / h))
+            src_start = max(0, -dx)
+            src_end = min(w, w - dx)
+            dst_start = max(0, dx)
+            length = src_end - src_start
+            if length > 0:
+                result[y, dst_start:dst_start + length] = arr[y, src_start:src_end]
+        img = Image.fromarray(result)
+    elif a == "elastic":
+        # Mô phỏng giấy nhăn/bẹp — biến dạng elastic ngẫu nhiên mượt
+        w, h = img.size
+        arr = np.array(img)
+        result = np.full_like(arr, 255)
+        scale = random.uniform(4, 10)
+        sigma = random.uniform(3, 6)
+        # Tạo displacement field ngẫu nhiên
+        dx = np.random.uniform(-scale, scale, (h, w)).astype(np.float32)
+        dy = np.random.uniform(-scale, scale, (h, w)).astype(np.float32)
+        # Làm mượt: map [-scale,scale] → [0,255] → blur → map lại
+        def _smooth_field(field, radius, s):
+            u8 = ((field + s) / (2 * s) * 255).astype(np.uint8)
+            u8 = np.array(Image.fromarray(u8).filter(ImageFilter.GaussianBlur(radius=radius)))
+            return (u8.astype(np.float32) / 255) * (2 * s) - s
+        dx = _smooth_field(dx, sigma, scale)
+        dy = _smooth_field(dy, sigma, scale)
+        # Áp dụng displacement
+        y_idx, x_idx = np.mgrid[0:h, 0:w]
+        x_new = np.clip(x_idx + dx.astype(int), 0, w - 1)
+        y_new = np.clip(y_idx + dy.astype(int), 0, h - 1)
+        result[y_idx, x_idx] = arr[y_new, x_new]
+        img = Image.fromarray(result)
     return img
 
 
@@ -347,6 +421,8 @@ def main():
                         help="Sinh anh sach, khong augmentation (cho version clean)")
     parser.add_argument("--augment_copies", type=int, default=1,
                         help="So ban augment cho moi text (1=khong tang, 2-3=tang dataset)")
+    parser.add_argument("--test_ratio", type=float, default=0.1,
+                        help="Ty le test set (default: 0.1 = 10%%)")
     args = parser.parse_args()
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -435,13 +511,33 @@ def main():
     for item in dataset:
         item.pop("_original_text", None)
 
-    jp = out / "vietnamese_ocr.json"
-    with open(jp, "w", encoding="utf-8") as f:
+    # Shuffle and split into train/test
+    random.shuffle(dataset)
+    n_test = max(1, int(len(dataset) * args.test_ratio))
+    test_data = dataset[:n_test]
+    train_data = dataset[n_test:]
+
+    # Save train set
+    train_path = out / "vietnamese_ocr_train.json"
+    with open(train_path, "w", encoding="utf-8") as f:
+        json.dump(train_data, f, ensure_ascii=False, indent=2)
+
+    # Save test set
+    test_path = out / "vietnamese_ocr_test.json"
+    with open(test_path, "w", encoding="utf-8") as f:
+        json.dump(test_data, f, ensure_ascii=False, indent=2)
+
+    # Also save combined (backward compat)
+    all_path = out / "vietnamese_ocr.json"
+    with open(all_path, "w", encoding="utf-8") as f:
         json.dump(dataset, f, ensure_ascii=False, indent=2)
+
     total_base = len(base_data) if args.augment_copies > 1 else len(dataset)
     print(f"\n✅ Done! {len(dataset)} samples (gốc: {total_base}, bỏ qua {skipped} trùng)")
     print(f"   Ảnh: {img_dir}")
-    print(f"   JSON: {jp}")
+    print(f"   Train: {train_path} ({len(train_data)} samples)")
+    print(f"   Test:  {test_path} ({len(test_data)} samples)")
+    print(f"   All:   {all_path} ({len(dataset)} samples)")
 
 
 if __name__ == "__main__":
