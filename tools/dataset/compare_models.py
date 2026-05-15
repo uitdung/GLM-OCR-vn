@@ -1,6 +1,14 @@
 """So sánh Original GLM-OCR vs Finetuned trên test set."""
+import argparse, os, glob
+from pathlib import Path
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch, json, editdistance
+
+parser = argparse.ArgumentParser(description="So sánh Original vs Finetuned GLM-OCR")
+parser.add_argument("--ft_path", type=str, default="./glm-ocr-vn", help="Đường dẫn model finetuned")
+parser.add_argument("--test_json", type=str, default="./vietnamese_ocr/vietnamese_ocr_test.json", help="Test set JSON")
+parser.add_argument("--n", type=int, default=5, help="Số ảnh test")
+args = parser.parse_args()
 
 # Load models
 print("Loading ORIGINAL model (zai-org/GLM-OCR)...")
@@ -10,20 +18,25 @@ model_orig = AutoModelForImageTextToText.from_pretrained(
 )
 print("OK")
 
-print("Loading FINETUNED model...")
-processor_ft = AutoProcessor.from_pretrained("tools/dataset/glm-ocr-vn", trust_remote_code=True)
+ft_path = os.path.abspath(args.ft_path)
+print(f"Loading FINETUNED model ({ft_path})...")
+processor_ft = AutoProcessor.from_pretrained(ft_path, trust_remote_code=True)
 model_ft = AutoModelForImageTextToText.from_pretrained(
-    "tools/dataset/glm-ocr-vn", trust_remote_code=True, torch_dtype="auto", device_map="auto"
+    ft_path, trust_remote_code=True, torch_dtype="auto", device_map="auto"
 )
 print("OK\n")
 
 # Load test set
-with open("tools/dataset/vietnamese_ocr/vietnamese_ocr_test.json", "r", encoding="utf-8") as f:
+with open(args.test_json, "r", encoding="utf-8") as f:
     data = json.load(f)
 lookup = {item["images"][0].split("/")[-1]: item["messages"][1]["content"] for item in data}
 
-test_files = ["txt_00442.png", "txt_09661.png", "txt_36827.png", "txt_40828.png", "txt_45839.png"]
-base = "tools/dataset/vietnamese_ocr/images"
+# Lấy N ảnh test ngẫu nhiên
+import random
+random.seed(42)
+sampled = random.sample(list(lookup.items()), min(args.n, len(lookup)))
+test_files = [fname for fname, _ in sampled]
+base = os.path.join(os.path.dirname(args.test_json), "images")
 
 
 def run_inference(processor, model, img_path):
