@@ -1,5 +1,5 @@
 """So sánh Original GLM-OCR vs Finetuned trên test set."""
-import argparse, os, glob
+import argparse, os, glob, random
 from pathlib import Path
 from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch, json, editdistance
@@ -7,7 +7,7 @@ import torch, json, editdistance
 parser = argparse.ArgumentParser(description="So sánh Original vs Finetuned GLM-OCR")
 parser.add_argument("--ft_path", type=str, default="./glm-ocr-vn", help="Đường dẫn model finetuned")
 parser.add_argument("--test_json", type=str, default="./vietnamese_ocr/vietnamese_ocr_test.json", help="Test set JSON")
-parser.add_argument("--n", type=int, default=5, help="Số ảnh test")
+parser.add_argument("--n", type=int, default=0, help="Số ảnh test (0 = tất cả)")
 args = parser.parse_args()
 
 # Load models
@@ -31,12 +31,13 @@ with open(args.test_json, "r", encoding="utf-8") as f:
     data = json.load(f)
 lookup = {item["images"][0].split("/")[-1]: item["messages"][1]["content"] for item in data}
 
-# Lấy N ảnh test ngẫu nhiên
-import random
-random.seed(42)
-sampled = random.sample(list(lookup.items()), min(args.n, len(lookup)))
-test_files = [fname for fname, _ in sampled]
+all_items = list(lookup.items())
+if args.n > 0:
+    random.seed(42)
+    all_items = random.sample(all_items, min(args.n, len(all_items)))
+test_files = [fname for fname, _ in all_items]
 base = os.path.join(os.path.dirname(args.test_json), "images")
+print(f"Testing trên {len(test_files)}/{len(lookup)} ảnh...\n")
 
 
 def run_inference(processor, model, img_path):
@@ -59,8 +60,20 @@ stats = {
     "orig_c": 0, "ft_c": 0, "orig_c_ok": 0, "ft_c_ok": 0,
 }
 
-for fname in test_files:
-    img_path = f"{base}/{fname}"
+# Nhóm dấu tiếng Việt cho diacritic accuracy
+DIACRITIC_GROUPS = {
+    "ă (ắằẳẵặ)": set("ăắằẳẵặ"),
+    "â (ấầẩẫậ)": set("âấầẩẫậ"),
+    "ê (ếềểễệ)": set("êếềểễệ"),
+    "ô (ốồổỗộ)": set("ôốồổỗộ"),
+    "ơ (ớờởỡợ)": set("ơớờởỡợ"),
+    "ư (ứừửữự)": set("ưứừửữự"),
+    "đ": set("đĐ"),
+}
+d_stats = {g: {"correct": 0, "total": 0} for g in DIACRITIC_GROUPS}
+
+for i, fname in enumerate(test_files):
+    img_path = os.path.join(base, fname)
     gt = lookup[fname]
 
     pred_orig = run_inference(processor_orig, model_orig, img_path)
@@ -76,20 +89,34 @@ for fname in test_files:
     stats["orig_c_ok"] += len(gt) - editdistance.eval(pred_orig, gt)
     stats["ft_c_ok"] += len(gt) - editdistance.eval(pred_ft, gt)
 
-    print(f"━━━ {fname} ━━━")
-    print(f"  GT:    {gt}")
-    print(f"  Orig:  {pred_orig}")
-    print(f"  FT:    {pred_ft}")
+    # Diacritic accuracy (chỉ trên finetuned)
+    for g, chars in DIACRITIC_GROUPS.items():
+        for c_gt, c_pred in zip(gt, pred_ft):
+            if c_gt in chars:
+                d_stats[g]["total"] += 1
+                if c_gt == c_pred:
+                    d_stats[g]["correct"] += 1
+
+    if (i + 1) % 25 == 0 or (i + 1) == len(test_files):
+        print(f"  [{i+1}/{len(test_files)}]")
+
+    show_detail = len(test_files) <= 10
+    if show_detail:
+        print(f"━━━ {fname} ━━━")
+        print(f"  GT:    {gt}")
+        print(f"  Orig:  {pred_orig}")
+        print(f"  FT:    {pred_ft}")
 
     orig_diffs = [(a, b) for a, b in zip(gt_w, pred_orig.split()) if a != b]
     ft_diffs = [(a, b) for a, b in zip(gt_w, pred_ft.split()) if a != b]
-    if orig_diffs:
-        print(f"  ❌ Orig sai: {orig_diffs}")
-    if ft_diffs:
-        print(f"  ❌ FT sai:   {ft_diffs}")
-    if not orig_diffs and not ft_diffs:
-        print(f"  ✅ Cả hai perfect!")
-    print()
+    if show_detail:
+        if orig_diffs:
+            print(f"  ❌ Orig sai: {orig_diffs}")
+        if ft_diffs:
+            print(f"  ❌ FT sai:   {ft_diffs}")
+        if not orig_diffs and not ft_diffs:
+            print(f"  ✅ Cả hai perfect!")
+        print()
 
 # Summary
 print("=" * 60)
@@ -101,4 +128,18 @@ orig_ca_pct = stats["orig_c_ok"] / max(stats["orig_c"], 1) * 100
 ft_ca_pct = stats["ft_c_ok"] / max(stats["ft_c"], 1) * 100
 print(f"  {'Word Acc':<18} {orig_wa_pct:>10.1f}% {ft_wa_pct:>10.1f}% {ft_wa_pct - orig_wa_pct:>+7.1f}%")
 print(f"  {'Char Acc':<18} {orig_ca_pct:>10.1f}% {ft_ca_pct:>10.1f}% {ft_ca_pct - orig_ca_pct:>+7.1f}%")
+print()
+
+# Diacritic accuracy (finetuned only)
+total_dc = sum(d["correct"] for d in d_stats.values())
+total_dt = sum(d["total"] for d in d_stats.values())
+if total_dt > 0:
+    print(f"  {'Diacritic Acc (FT)':<18} {total_dc / total_dt * 100:>10.1f}%  ({total_dc}/{total_dt})")
+    print()
+    print(f"  {'Nhóm dấu':<20} {'Accuracy':>10} {'Chi tiết':>12}")
+    print(f"  {'─'*20} {'─'*10} {'─'*12}")
+    for g in DIACRITIC_GROUPS:
+        t, c = d_stats[g]["total"], d_stats[g]["correct"]
+        acc = c / max(t, 1) * 100
+        print(f"  {g:<20} {acc:>9.1f}%  ({c}/{t})")
 print("=" * 60)
