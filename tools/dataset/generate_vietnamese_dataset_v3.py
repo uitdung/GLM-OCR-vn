@@ -125,9 +125,9 @@ def render(text, fp, fs=24, bg=(255,255,255), tc=(0,0,0), pad=25, ls=8):
 # AUGMENTATION
 # ============================================================================
 
-def augment(img):
+def augment(img, allow_none=True):
     """Augmentation cho OCR van ban - gia lap anh chuc thuc te."""
-    a = random.choice([
+    choices = [
         "none", "none", "none",
         "blur",
         "noise",
@@ -136,7 +136,10 @@ def augment(img):
         "rotate",
         "shadow",
         "glare",
-    ])
+    ]
+    if not allow_none:
+        choices = [c for c in choices if c != "none"]
+    a = random.choice(choices)
     if a == "none":
         pass
     elif a == "blur":
@@ -236,13 +239,14 @@ def unique(text):
 
 def make_result(text, idx, img_dir, fonts, no_augment):
     """Helper: render text, augment, capitalize, save image, return sample."""
+    original_text = text
+    text = random_capitalize(text)
     fp = random.choice(fonts)
     fs = random.randint(18, 28)
     bg = random.choice(BG)
     img = render(text, fp, fs, bg)
     if not no_augment:
         img = augment(img)
-    text = random_capitalize(text)
     fname = f"txt_{idx:05d}.png"
     img.save(img_dir / fname)
     return {
@@ -250,7 +254,8 @@ def make_result(text, idx, img_dir, fonts, no_augment):
             {"role": "user", "content": "<image>Text Recognition:"},
             {"role": "assistant", "content": text}
         ],
-        "images": [f"images/{fname}"]
+        "images": [f"images/{fname}"],
+        "_original_text": original_text
     }
 
 
@@ -405,12 +410,13 @@ def main():
         print(f"\nSinh thêm {args.augment_copies - 1} bản augment cho {len(base_data)} ảnh gốc...")
         for copy_i in range(1, args.augment_copies):
             for item in base_data:
-                text = item["messages"][1]["content"]
+                orig = item["_original_text"]
+                text = random_capitalize(orig)
                 fp = random.choice(fonts)
                 fs = random.randint(18, 28)
                 bg = random.choice(BG)
                 img = render(text, fp, fs, bg)
-                img = augment(img)
+                img = augment(img, allow_none=False)
                 fname = f"txt_{idx:05d}.png"
                 img.save(img_dir / fname)
                 dataset.append({
@@ -418,11 +424,16 @@ def main():
                         {"role": "user", "content": "<image>Text Recognition:"},
                         {"role": "assistant", "content": text}
                     ],
-                    "images": [f"images/{fname}"]
+                    "images": [f"images/{fname}"],
+                    "_original_text": orig
                 })
                 idx += 1
                 if idx % 100 == 0:
                     print(f"  {idx}/{total_target}...")
+
+    # Strip internal fields before saving
+    for item in dataset:
+        item.pop("_original_text", None)
 
     jp = out / "vietnamese_ocr.json"
     with open(jp, "w", encoding="utf-8") as f:
