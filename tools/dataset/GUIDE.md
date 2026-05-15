@@ -83,6 +83,8 @@ Model học chịu được biến dạng thực tế qua các loại augmentati
 | downscale | Giảm resolution rồi phóng lại |
 | wave | Cong dạng sóng (trang sách gập) |
 | elastic | Nhăn/bẹp mượt (giấy nhàu) |
+| motion_blur | Nhòe do rung tay khi chụp |
+| defocus | Nhòe do lệch tiêu cự (out of focus) |
 
 ### Upload lên Google Drive
 

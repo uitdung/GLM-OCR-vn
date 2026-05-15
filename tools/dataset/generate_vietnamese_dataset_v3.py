@@ -154,6 +154,8 @@ def augment(img, allow_none=True):
         "downscale",
         "wave",
         "elastic",
+        "motion_blur",
+        "defocus",
     ]
     if not allow_none:
         choices = [c for c in choices if c != "none"]
@@ -255,6 +257,40 @@ def augment(img, allow_none=True):
         y_new = np.clip(y_idx + dy.astype(int), 0, h - 1)
         result[y_idx, x_idx] = arr[y_new, x_new]
         img = Image.fromarray(result)
+    elif a == "motion_blur":
+        # Mô phỏng rung tay khi chụp — nhòe theo một hướng
+        w, h = img.size
+        arr = np.array(img, dtype=np.float32)
+        result = np.zeros_like(arr)
+        kernel_size = random.randint(5, 15)
+        angle = random.uniform(0, 360)
+        dx = math.cos(math.radians(angle))
+        dy = math.sin(math.radians(angle))
+        for i in range(kernel_size):
+            t = i - kernel_size // 2
+            shift_x = int(round(dx * t))
+            shift_y = int(round(dy * t))
+            shifted = np.zeros_like(arr)
+            y_src_start = max(0, shift_y)
+            y_dst_start = max(0, -shift_y)
+            y_len = h - abs(shift_y)
+            x_src_start = max(0, shift_x)
+            x_dst_start = max(0, -shift_x)
+            x_len = w - abs(shift_x)
+            if y_len > 0 and x_len > 0:
+                shifted[y_src_start:y_src_start+y_len, x_src_start:x_src_start+x_len] = \
+                    arr[y_dst_start:y_dst_start+y_len, x_dst_start:x_dst_start+x_len]
+            result += shifted
+        result = np.clip(result / kernel_size, 0, 255).astype(np.uint8)
+        img = Image.fromarray(result)
+    elif a == "defocus":
+        # Mô phỏng lệch tiêu cự — nhòe tròn (disk blur)
+        radius = random.uniform(1.5, 3.5)
+        img = img.filter(ImageFilter.GaussianBlur(radius=radius))
+        # Giảm nét thêm một chút để giống out-of-focus thật
+        arr = np.array(img, dtype=np.float32)
+        noise = np.random.normal(0, random.uniform(2, 8), arr.shape)
+        img = Image.fromarray(np.clip(arr + noise, 0, 255).astype(np.uint8))
     return img
 
 
