@@ -7,10 +7,12 @@
     "test:fonts": "python font_tester_v2.py",
     "gen": "python generate_vietnamese_dataset_v3.py",
     "gen:clean": "python generate_vietnamese_dataset_v3.py --no_augment",
-    "gen:big": "python generate_vietnamese_dataset_v3.py --num_samples 10000 --augment_copies 3",
+    "gen:big": "python generate_vietnamese_dataset_v3.py --num_samples 20000 --augment_copies 3 --test_ratio 0.1",
     "zip": "powershell Compress-Archive -Path vietnamese_ocr -DestinationPath vietnamese_ocr.zip -Force",
     "build": "npm run gen && npm run zip",
     "build:clean": "npm run gen:clean -- --output_dir ./vietnamese_ocr && npm run zip",
-    "build:big": "npm run gen:big && npm run zip"
+    "build:big": "npm run gen:big && npm run zip",
+    "test:image": "python test_local.py",
+    "test:compare": "python compare_models.py"
   }
 }
