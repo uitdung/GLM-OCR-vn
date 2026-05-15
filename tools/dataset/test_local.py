@@ -96,7 +96,7 @@ def collect_images(paths: list[str]) -> list[str]:
                 images.extend(glob.glob(str(p / ext)))
         else:
             # Có thể là glob pattern
-            images.extend(glob.glob(p))
+            images.extend(glob.glob(str(p)))
     return sorted(set(images))
 
 
