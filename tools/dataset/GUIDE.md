@@ -6,15 +6,79 @@ Flow hoàn chỉnh từ sinh data → train → test local.
 
 ## Mục lục
 
-1. [Cài đặt](#1-cài-đặt)
-2. [Sinh dataset](#2-sinh-dataset)
-3. [Fine-tune trên Google Colab](#3-fine-tune-trên-google-colab)
-4. [Test local](#4-test-local)
-5. [So sánh original vs finetuned](#5-so-sánh-original-vs-finetuned)
-6. [Dùng qua Ollama](#6-dùng-qua-ollama)
-7. [Cấu hình training](#7-cấu-hình-training)
-8. [Chi tiết dataset](#8-chi-tiết-dataset)
-9. [Troubleshooting](#9-troubleshooting)
+1. [Model Technical Specs](#model-technical-specs)
+2. [Cài đặt](#1-cài-đặt)
+3. [Sinh dataset](#2-sinh-dataset)
+4. [Fine-tune trên Google Colab](#3-fine-tune-trên-google-colab)
+5. [Test local](#4-test-local)
+6. [So sánh original vs finetuned](#5-so-sánh-original-vs-finetuned)
+7. [Dùng qua Ollama](#6-dùng-qua-ollama)
+8. [Cấu hình training](#7-cấu-hình-training)
+9. [Chi tiết dataset](#8-chi-tiết-dataset)
+10. [Troubleshooting](#9-troubleshooting)
+
+---
+
+## Model Technical Specs
+
+### Tổng quan
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Architecture | `GlmOcrForConditionalGeneration` |
+| Model type | `glm_ocr` |
+| Total params | **1,114,975,232** (~1.1B) |
+| Trainable params (LoRA rank 16) | 7,569,408 (~7.6M, 0.68%) |
+| LoRA targets | `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_up_proj`, `down_proj` |
+| Compute dtype | bfloat16 (trainable params upcast to float32) |
+
+### Text LLM
+
+| Thuộc tính | Giá trị |
+|---|---|
+| hidden_size | 1536 |
+| num_hidden_layers | 16 |
+| num_attention_heads | 16 |
+| num_key_value_heads | 8 (GQA) |
+| head_dim | 128 |
+| intermediate_size | 4608 |
+| max_position_embeddings | 131,072 |
+| hidden_act | SiLU |
+| vocab_size | 59,392 |
+| RoPE | theta=10000, mRoPE sections=[16, 24, 24] |
+| tie_word_embeddings | false |
+
+### Vision Encoder
+
+| Thuộc tính | Giá trị |
+|---|---|
+| depth (layers) | 24 |
+| hidden_size | 1024 |
+| image_size | 336 |
+| patch_size | 14 |
+| intermediate_size | 4096 |
+| num_heads | 16 |
+| out_hidden_size | 1536 |
+| spatial_merge_size | 2 |
+| temporal_patch_size | 2 |
+
+### Processor
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Image processor | `Glm46VImageProcessor` |
+| Video processor | `Glm46VVideoProcessor` |
+| Normalization | CLIP mean=[0.481, 0.458, 0.408], std=[0.269, 0.261, 0.276] |
+| Resample | bicubic (3) |
+
+### Training pipeline
+
+| Thuộc tính | Giá trị |
+|---|---|
+| Attention | torch SDPA |
+| Gradient checkpointing | enabled |
+| KV cache | disabled (during training) |
+| Vision model | frozen (`visual.patch_embed`, `visual.blocks`) |
 
 ---
 
@@ -93,7 +157,7 @@ Model học chịu được biến dạng thực tế qua các loại augmentati
 Compress-Archive -Path vietnamese_ocr -DestinationPath vietnamese_ocr.zip -Force
 ```
 
-Upload `vietnamese_ocr.zip` vào Google Drive `My Drive` root.
+Upload `vietnamese_ocr.zip` vào Google Drive `My Drive/ocr_data/`.
 
 ---
 
@@ -104,24 +168,25 @@ Mở `finetune_glm_ocr_vn_1epoch.ipynb` trên Colab (GPU T4 16GB).
 ### Flow từng bước
 
 ```
-Bước 1-6: Setup (chỉ 1 lần đầu)
-  ├── 1. Check GPU
-  ├── 2. Mount Drive & extract dataset
-  ├── 3. Install LLaMA-Factory
-  ├── 4. Download model gốc
-  ├── 5. Register dataset
-  └── 6. Write training config
+Bước 1-5: Setup (chỉ 1 lần đầu)
+  1. Check GPU
+  2. Mount Drive & extract dataset
+  3. Install LLaMA-Factory
+  4. Download model gốc
+  5. Register dataset
 
-Bước 7: Train ← lặp lại mỗi epoch
-  └── Tự động detect checkpoint cũ để resume
+Bước 6: Train (nhấn lại mỗi epoch)
+  - Tự động detect checkpoint cũ để resume
+  - Checkpoint tự lưu thẳng lên Drive
 
-Bước 8: Merge & Đánh giá ← chạy sau mỗi epoch
-  ├── Merge LoRA weights
-  ├── Chạy eval trên test set
-  ├── Hiển thị bảng PROGRESS ACROSS ALL EPOCHS
-  └── Tự động lưu kết quả lên Drive
+Bước 7: Merge & Eval (sau mỗi epoch)
+  - Merge LoRA weights (lưu thẳng lên Drive)
+  - Chạy eval trên test set
+  - Hiển thị bảng progress across all epochs
+  - Tự động lưu kết quả eval lên Drive
 
-Bước 10: Save model cuối cùng
+Bước 8: Test ảnh bất kỳ
+  - Upload 1 ảnh từ máy để test nhanh
 ```
 
 ### Quyết định train thêm hay dừng
@@ -133,9 +198,9 @@ Sau mỗi lần chạy eval, đọc bảng kết quả:
 | < 80% | Train thêm epoch |
 | 80-90% | Train thêm, tập trung vào nhóm yếu |
 | 90-95% | Có thể dừng, cân nhắc gen data mới |
-| ≥ 95% | **Save model** → chuyển sang test local |
+| >= 95% | Model đã sẵn sàng trên Drive (`My Drive/ocr_data/glm-ocr-vn/`) |
 
-Nếu epoch mới toàn 🔴 → **overfitting**, dùng checkpoint epoch trước.
+Nếu epoch mới toàn dau (loss tang) -> overfitting, dùng checkpoint epoch trước.
 
 ### Cấu hình training hiện tại
 
@@ -143,15 +208,15 @@ Nếu epoch mới toàn 🔴 → **overfitting**, dùng checkpoint epoch trướ
 finetuning_type: lora
 lora_rank: 16
 lora_alpha: 32
-lora_dropout: 0.05
+lora_dropout: 0.1
 lora_target: all
 
-learning_rate: 5.0e-5
-lr_scheduler_type: constant_with_warmup   # LR ổn định khi resume
+learning_rate: 1.0e-5
+lr_scheduler_type: constant_with_warmup
 warmup_ratio: 0.05
-num_train_epochs: 1                        # train từng epoch
+num_train_epochs: 1                 # train tung epoch
 
-val_size: 0.0                              # Dùng test set riêng thay vì val split
+val_size: 0.1                       # 10% val split de theo doi overfitting
 ```
 
 ---
@@ -339,11 +404,11 @@ LR
 - **Rank 16: cân bằng tốt** giữa capacity và overfit risk
 - Rank 32: dễ overfit trên synthetic data
 
-### Learning rate: 5e-5
+### Learning rate: 1e-5
 
 - 1e-4: quá cao cho synthetic data, dễ overfit
-- **5e-5: ổn định**, giảm đều loss mà không spike
-- 1e-5: quá thấp, học chậm
+- **1e-5: ổn định hơn**, học chắc hơn, giảm overfit risk trên synthetic data
+- 5e-5: vẫn dùng được nhưng cần theo dõi eval_loss kỹ
 
 ---
 
