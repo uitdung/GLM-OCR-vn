@@ -206,17 +206,17 @@ Nếu epoch mới toàn dau (loss tang) -> overfitting, dùng checkpoint epoch t
 
 ```yaml
 finetuning_type: lora
-lora_rank: 16
-lora_alpha: 32
+lora_rank: 8
+lora_alpha: 16
 lora_dropout: 0.1
 lora_target: all
 
-learning_rate: 1.0e-5
+learning_rate: 1.0e-4
 lr_scheduler_type: constant_with_warmup
 warmup_ratio: 0.05
 num_train_epochs: 1                 # train tung epoch
 
-val_size: 0.1                       # 10% val split de theo doi overfitting
+val_size: 0.01                      # 1% val split
 eval_strategy: steps                 # chay eval moi 500 step
 eval_steps: 500
 ```
@@ -400,17 +400,17 @@ LR
  └───────────────────────────────────→ steps
 ```
 
-### Lora_rank: 16
+### Lora_rank: 8
 
-- Rank 8: quá ít cho 3,544 từ có dấu kép
-- **Rank 16: cân bằng tốt** giữa capacity và overfit risk
-- Rank 32: dễ overfit trên synthetic data
+- **Rank 8: khuyến nghị của tác giả GLM-OCR**, đủ cho domain adaptation
+- Rank 16: tăng capacity nhưng dễ overfit trên synthetic data
+- Rank 32: quá nhiều, overfit risk cao
 
-### Learning rate: 1e-5
+### Learning rate: 1e-4
 
-- 1e-4: quá cao cho synthetic data, dễ overfit
-- **1e-5: ổn định hơn**, học chắc hơn, giảm overfit risk trên synthetic data
-- 5e-5: vẫn dùng được nhưng cần theo dõi eval_loss kỹ
+- **1e-4: khuyến nghị của tác giả GLM-OCR cho LoRA**
+- 5e-5: dùng được nhưng học chậm hơn
+- 1e-5: quá thấp cho LoRA, học rất chậm
 
 ---
 
