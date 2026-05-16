@@ -217,6 +217,8 @@ warmup_ratio: 0.05
 num_train_epochs: 1                 # train tung epoch
 
 val_size: 0.1                       # 10% val split de theo doi overfitting
+eval_strategy: steps                 # chay eval moi 500 step
+eval_steps: 500
 ```
 
 ---
