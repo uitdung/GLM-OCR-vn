@@ -8,47 +8,67 @@ Cách dùng:
 
 import os
 from pathlib import Path
+
 from PIL import Image, ImageDraw, ImageFont
 
 VERIFIED_FONTS = [
-    "C:/Windows/Fonts/arial.ttf", "C:/Windows/Fonts/arialbd.ttf",
-    "C:/Windows/Fonts/arialbi.ttf", "C:/Windows/Fonts/ariali.ttf",
-    "C:/Windows/Fonts/calibri.ttf", "C:/Windows/Fonts/calibrib.ttf",
-    "C:/Windows/Fonts/calibrii.ttf", "C:/Windows/Fonts/calibril.ttf",
-    "C:/Windows/Fonts/calibrili.ttf", "C:/Windows/Fonts/calibriz.ttf",
-    "C:/Windows/Fonts/cambria.ttc", "C:/Windows/Fonts/cambriab.ttf",
-    "C:/Windows/Fonts/cambriai.ttf", "C:/Windows/Fonts/cambriaz.ttf",
-    "C:/Windows/Fonts/Candara.ttf", "C:/Windows/Fonts/Candarab.ttf",
-    "C:/Windows/Fonts/Candarai.ttf", "C:/Windows/Fonts/Candaral.ttf",
-    "C:/Windows/Fonts/Candarali.ttf", "C:/Windows/Fonts/Candaraz.ttf",
-    "C:/Windows/Fonts/CascadiaCode.ttf", "C:/Windows/Fonts/CascadiaMono.ttf",
-    "C:/Windows/Fonts/consola.ttf", "C:/Windows/Fonts/consolab.ttf",
-    "C:/Windows/Fonts/consolai.ttf", "C:/Windows/Fonts/consolaz.ttf",
-    "C:/Windows/Fonts/constan.ttf", "C:/Windows/Fonts/constanb.ttf",
-    "C:/Windows/Fonts/constani.ttf", "C:/Windows/Fonts/constanz.ttf",
-    "C:/Windows/Fonts/corbel.ttf", "C:/Windows/Fonts/corbelb.ttf",
-    "C:/Windows/Fonts/corbeli.ttf", "C:/Windows/Fonts/corbell.ttf",
-    "C:/Windows/Fonts/corbelli.ttf", "C:/Windows/Fonts/corbelz.ttf",
-    "C:/Windows/Fonts/cour.ttf", "C:/Windows/Fonts/courbd.ttf",
+    "C:/Windows/Fonts/arial.ttf",
+    "C:/Windows/Fonts/arialbd.ttf",
+    "C:/Windows/Fonts/arialbi.ttf",
+    "C:/Windows/Fonts/ariali.ttf",
+    "C:/Windows/Fonts/calibri.ttf",
+    "C:/Windows/Fonts/calibrib.ttf",
+    "C:/Windows/Fonts/calibrii.ttf",
+    "C:/Windows/Fonts/calibril.ttf",
+    "C:/Windows/Fonts/calibrili.ttf",
+    "C:/Windows/Fonts/calibriz.ttf",
+    "C:/Windows/Fonts/cambria.ttc",
+    "C:/Windows/Fonts/cambriab.ttf",
+    "C:/Windows/Fonts/cambriai.ttf",
+    "C:/Windows/Fonts/cambriaz.ttf",
+    "C:/Windows/Fonts/Candara.ttf",
+    "C:/Windows/Fonts/Candarab.ttf",
+    "C:/Windows/Fonts/Candarai.ttf",
+    "C:/Windows/Fonts/Candaraz.ttf",
+    "C:/Windows/Fonts/consola.ttf",
+    "C:/Windows/Fonts/consolab.ttf",
+    "C:/Windows/Fonts/consolai.ttf",
+    "C:/Windows/Fonts/consolaz.ttf",
+    "C:/Windows/Fonts/constan.ttf",
+    "C:/Windows/Fonts/constanb.ttf",
+    "C:/Windows/Fonts/constani.ttf",
+    "C:/Windows/Fonts/constanz.ttf",
+    "C:/Windows/Fonts/cour.ttf",
+    "C:/Windows/Fonts/courbd.ttf",
     "C:/Windows/Fonts/couri.ttf",
-    "C:/Windows/Fonts/LeelaUIb.ttf", "C:/Windows/Fonts/LeelawUI.ttf",
-    "C:/Windows/Fonts/micross.ttf",
-    "C:/Windows/Fonts/NotoSansKR-VF.ttf", "C:/Windows/Fonts/NotoSerifKR-VF.ttf",
-    "C:/Windows/Fonts/pala.ttf", "C:/Windows/Fonts/palab.ttf",
-    "C:/Windows/Fonts/palabi.ttf", "C:/Windows/Fonts/palai.ttf",
-    "C:/Windows/Fonts/REFSAN.TTF",
-    "C:/Windows/Fonts/segoeui.ttf", "C:/Windows/Fonts/segoeuib.ttf",
-    "C:/Windows/Fonts/segoeuii.ttf", "C:/Windows/Fonts/segoeuil.ttf",
-    "C:/Windows/Fonts/segoeuisl.ttf", "C:/Windows/Fonts/segoeuiz.ttf",
-    "C:/Windows/Fonts/seguibl.ttf", "C:/Windows/Fonts/seguibli.ttf",
-    "C:/Windows/Fonts/seguisb.ttf", "C:/Windows/Fonts/seguisbi.ttf",
-    "C:/Windows/Fonts/seguisli.ttf", "C:/Windows/Fonts/SegUIVar.ttf",
-    "C:/Windows/Fonts/SitkaVF.ttf", "C:/Windows/Fonts/SitkaVF-Italic.ttf",
-    "C:/Windows/Fonts/tahoma.ttf", "C:/Windows/Fonts/tahomabd.ttf",
-    "C:/Windows/Fonts/times.ttf", "C:/Windows/Fonts/timesbd.ttf",
-    "C:/Windows/Fonts/timesbi.ttf", "C:/Windows/Fonts/timesi.ttf",
-    "C:/Windows/Fonts/verdana.ttf", "C:/Windows/Fonts/verdanab.ttf",
-    "C:/Windows/Fonts/verdanai.ttf", "C:/Windows/Fonts/verdanaz.ttf",
+    "C:/Windows/Fonts/pala.ttf",
+    "C:/Windows/Fonts/palab.ttf",
+    "C:/Windows/Fonts/palabi.ttf",
+    "C:/Windows/Fonts/palai.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
+    "C:/Windows/Fonts/segoeuib.ttf",
+    "C:/Windows/Fonts/segoeuii.ttf",
+    "C:/Windows/Fonts/segoeuil.ttf",
+    "C:/Windows/Fonts/segoeuisl.ttf",
+    "C:/Windows/Fonts/segoeuiz.ttf",
+    "C:/Windows/Fonts/seguibl.ttf",
+    "C:/Windows/Fonts/seguibli.ttf",
+    "C:/Windows/Fonts/seguisb.ttf",
+    "C:/Windows/Fonts/seguisbi.ttf",
+    "C:/Windows/Fonts/seguisli.ttf",
+    "C:/Windows/Fonts/SegUIVar.ttf",
+    "C:/Windows/Fonts/SitkaVF.ttf",
+    "C:/Windows/Fonts/SitkaVF-Italic.ttf",
+    "C:/Windows/Fonts/tahoma.ttf",
+    "C:/Windows/Fonts/tahomabd.ttf",
+    "C:/Windows/Fonts/times.ttf",
+    "C:/Windows/Fonts/timesbd.ttf",
+    "C:/Windows/Fonts/timesbi.ttf",
+    "C:/Windows/Fonts/timesi.ttf",
+    "C:/Windows/Fonts/verdana.ttf",
+    "C:/Windows/Fonts/verdanab.ttf",
+    "C:/Windows/Fonts/verdanai.ttf",
+    "C:/Windows/Fonts/verdanaz.ttf",
 ]
 
 # ============================================================================
@@ -151,7 +171,13 @@ def gen_test_image(font_path: str, output_path: str):
     lines.append(("", font, (0, 0, 0)))
 
     # Section 1: Nguyên âm kép + dấu kép (2 dấu chồng)
-    lines.append(("▼ NGUYÊN ÂM KÉP + DẤU KÉP (2 dấu chồng nhau — khó nhất):", font_section, (0, 0, 150)))
+    lines.append(
+        (
+            "▼ NGUYÊN ÂM KÉP + DẤU KÉP (2 dấu chồng nhau — khó nhất):",
+            font_section,
+            (0, 0, 150),
+        )
+    )
     for row in HARDEST_CHARS:
         lines.append((f"  {row}", font, (0, 0, 0)))
 
@@ -218,7 +244,7 @@ def gen_test_image(font_path: str, output_path: str):
 
 
 def main():
-    out = Path("tools/dataset/font_test_v2")
+    out = Path(__file__).parent / "output"
     img_dir = out / "images"
     img_dir.mkdir(parents=True, exist_ok=True)
 

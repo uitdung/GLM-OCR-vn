@@ -72,6 +72,40 @@ DIACRITIC_GROUPS = {
 }
 d_stats = {g: {"correct": 0, "total": 0} for g in DIACRITIC_GROUPS}
 
+
+def align_chars(gt, pred):
+    m, n = len(gt), len(pred)
+    dp = [[0] * (n + 1) for _ in range(m + 1)]
+    for i in range(m + 1):
+        dp[i][0] = i
+    for j in range(n + 1):
+        dp[0][j] = j
+    for i in range(1, m + 1):
+        for j in range(1, n + 1):
+            if gt[i - 1] == pred[j - 1]:
+                dp[i][j] = dp[i - 1][j - 1]
+            else:
+                dp[i][j] = 1 + min(dp[i - 1][j], dp[i][j - 1], dp[i - 1][j - 1])
+    pairs = []
+    i, j = m, n
+    while i > 0 or j > 0:
+        if i > 0 and j > 0 and gt[i - 1] == pred[j - 1]:
+            pairs.append((gt[i - 1], pred[j - 1]))
+            i -= 1
+            j -= 1
+        elif i > 0 and j > 0 and dp[i][j] == dp[i - 1][j - 1] + 1:
+            pairs.append((gt[i - 1], pred[j - 1]))
+            i -= 1
+            j -= 1
+        elif i > 0 and dp[i][j] == dp[i - 1][j] + 1:
+            pairs.append((gt[i - 1], ""))
+            i -= 1
+        else:
+            pairs.append(("", pred[j - 1]))
+            j -= 1
+    pairs.reverse()
+    return pairs
+
 for i, fname in enumerate(test_files):
     img_path = os.path.join(base, fname)
     gt = lookup[fname]
@@ -89,9 +123,9 @@ for i, fname in enumerate(test_files):
     stats["orig_c_ok"] += len(gt) - editdistance.eval(pred_orig, gt)
     stats["ft_c_ok"] += len(gt) - editdistance.eval(pred_ft, gt)
 
-    # Diacritic accuracy (chỉ trên finetuned)
+    # Diacritic accuracy (chỉ trên finetuned, using optimal alignment)
     for g, chars in DIACRITIC_GROUPS.items():
-        for c_gt, c_pred in zip(gt, pred_ft):
+        for c_gt, c_pred in align_chars(gt, pred_ft):
             if c_gt in chars:
                 d_stats[g]["total"] += 1
                 if c_gt == c_pred:
