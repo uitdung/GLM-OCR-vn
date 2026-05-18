@@ -19,6 +19,7 @@ import json
 import math
 import os
 import random
+import re
 from pathlib import Path
 
 import numpy as np
@@ -98,6 +99,9 @@ def load_hard_words():
     singles = [w for w in words if " " not in w]
     phrases = [w for w in words if " " in w]
 
+    # Từ đơn hoàn toàn không dấu (chỉ a-z) — dùng cho gen_plain_words
+    plain_singles = [w for w in singles if re.match(r'^[a-z]+$', w)]
+
     groups = {
         "ă": [w for w in singles if any(c in w for c in "ắằẳẵặ")],
         "â": [w for w in singles if any(c in w for c in "ấầẩẫậ")],
@@ -118,7 +122,7 @@ def load_hard_words():
         if len(confusion) >= 5000:
             break
 
-    return singles, phrases, groups, confusion
+    return singles, phrases, groups, confusion, plain_singles
 
 
 # ============================================================================
@@ -180,40 +184,31 @@ def _perspective_coeffs(src_pts, dst_pts):
 def augment(img, allow_none=True):
     """Augmentation cho OCR van ban - gia lap anh chuc thuc te."""
     choices = [
+        "none",
+        "none",
+        "none",
+        "none",
+        "none",  # 40% giữ nguyên — model học dấu rõ ràng
         "blur",
-        "blur",
-        "blur",  # rung tay, nét kém — RẤT phổ biến
+        "blur",  # giảm từ 3→2, blur nhẹ hơn
         "noise",
-        "noise",
-        "noise",
-        "noise",  # ISO cao, thiếu sáng — phổ biến
+        "noise",  # giảm từ 4→2
         "contrast_down",
-        "contrast_down",  # in mờ, ánh sáng yếu — phổ biến
-        "contrast_up",  # chụp quá sáng, ít gặp hơn
+        "contrast_up",
         "jpeg",
-        "jpeg",
-        "jpeg",  # nén ảnh điện thoại — RẤT phổ biến
+        "jpeg",  # giảm từ 3→2
         "rotate",
-        "rotate",
-        "rotate",  # nghiêng tay cầm — RẤT phổ biến
+        "rotate",  # giảm từ 3→2
         "shadow",
-        "shadow",
-        "shadow",
-        "shadow",  # ánh sáng không đều, nếp gấp — RẤT phổ biến
-        "glare",
-        "glare",
-        "glare",  # phản chiếu đèn/flash — phổ biến
+        "shadow",  # giảm từ 4→2
+        "glare",  # giảm từ 3→1
         "perspective",
-        "perspective",
-        "perspective",  # chụp góc nghiêng — RẤT phổ biến
-        "downscale",
-        "downscale",  # xa, phân giải thấp
-        "wave",  # giấy cong, hiếm
-        "elastic",  # giấy nhăn, hiếm
-        "motion_blur",
-        "motion_blur",  # rung tay mạnh
-        "defocus",
-        "defocus",  # lệch tiêu cự
+        "perspective",  # giảm từ 3→2
+        "downscale",  # giảm từ 2→1
+        "wave",  # hiếm
+        "elastic",  # hiếm
+        "motion_blur",  # giảm từ 2→1
+        "defocus",  # giảm từ 2→1
     ]
     if not allow_none:
         choices = [c for c in choices if c != "none"]
@@ -221,7 +216,7 @@ def augment(img, allow_none=True):
     if a == "none":
         pass
     elif a == "blur":
-        img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 1.5)))
+        img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.8)))
     elif a == "noise":
         arr = np.array(img)
         intensity = random.randint(15, 35)  # noise vừa đủ, không che dấu
@@ -572,6 +567,41 @@ def gen_dense_sentence(phrases, singles, fonts, img_dir, idx, no_augment=False):
     return make_result(text, idx, img_dir, fonts, no_augment)
 
 
+def gen_plain_words(singles, plain_singles, fonts, img_dir, idx, no_augment=False):
+    """Mix từ không dấu + có dấu để model học KHÔNG thêm dấu sai chỗ."""
+    n_plain = random.randint(3, 6)
+    n_diac = random.randint(2, 5)
+    plain = random.sample(plain_singles, min(n_plain, len(plain_singles)))
+    diac = random.sample(singles, min(n_diac, len(singles)))
+    words = plain + diac
+    random.shuffle(words)
+    text = " ".join(words)
+    text = unique(text)
+    if not text:
+        return None
+    return make_result(text, idx, img_dir, fonts, no_augment)
+
+
+def gen_paragraph(singles, phrases, plain_singles, fonts, img_dir, idx, no_augment=False):
+    """Sinh đoạn văn 3-5 dòng cho Stage 2 — mô phỏng tài liệu nhiều dòng."""
+    lines = []
+    for _ in range(random.randint(3, 5)):
+        # Mỗi dòng: mix từ có dấu + không dấu, 6-12 từ
+        n_total = random.randint(6, 12)
+        n_plain = random.randint(0, min(3, n_total // 2))
+        n_diac = n_total - n_plain
+        plain = random.sample(plain_singles, min(n_plain, len(plain_singles)))
+        diac = random.sample(singles, min(n_diac, len(singles)))
+        words = plain + diac
+        random.shuffle(words)
+        lines.append(" ".join(words))
+    text = "\n".join(lines)
+    text = unique(text)
+    if not text:
+        return None
+    return make_result(text, idx, img_dir, fonts, no_augment)
+
+
 # ============================================================================
 # MAIN
 # ============================================================================
@@ -604,6 +634,11 @@ def main():
         default=1,
         help="So ban augment cho moi text (1=khong tang, 2-3=tang dataset)",
     )
+    parser.add_argument(
+        "--stage2",
+        action="store_true",
+        help="Stage 2: chỉ sinh đoạn văn paragraph cho document-level training",
+    )
     args = parser.parse_args()
     random.seed(args.seed)
     np.random.seed(args.seed)
@@ -615,30 +650,36 @@ def main():
     fonts = [f for f in VERIFIED_FONTS if os.path.exists(f)]
 
     print("Đang tải từ điển...")
-    singles, phrases, groups, confusion = load_hard_words()
+    singles, phrases, groups, confusion, plain_singles = load_hard_words()
     print(f"✓ {len(fonts)} font")
     print(
-        f"  {len(singles):,} từ đơn, {len(phrases):,} cụm từ, {len(confusion):,} cặp nhầm, {len(groups)} nhóm dấu"
+        f"  {len(singles):,} từ đơn, {len(phrases):,} cụm từ, {len(confusion):,} cặp nhầm, {len(groups)} nhóm dấu, {len(plain_singles):,} từ không dấu"
     )
 
-    generators = [
-        (lambda **kw: gen_word_list(singles, **kw), 10),  # từ đơn đã đủ cover
-        (lambda **kw: gen_phrase_list(phrases, **kw), 25),  # ↑ cụm từ
-        (lambda **kw: gen_confusion_pair(confusion, singles, **kw), 15),
-        (lambda **kw: gen_grouped_words(groups, **kw), 10),  # ↓ từ đơn dư
-        (lambda **kw: gen_mixed_line(singles, phrases, **kw), 15),
-        (
-            lambda **kw: gen_dense_sentence(phrases, singles, **kw),
-            25,
-        ),  # ↑ nhiều phrase/sample
-    ]
+    if args.stage2:
+        generators = [
+            (lambda **kw: gen_paragraph(singles, phrases, plain_singles, **kw), 100),
+        ]
+    else:
+        generators = [
+            (lambda **kw: gen_word_list(singles, **kw), 10),  # từ đơn đã đủ cover
+            (lambda **kw: gen_phrase_list(phrases, **kw), 25),  # ↑ cụm từ
+            (lambda **kw: gen_confusion_pair(confusion, singles, **kw), 15),
+            (lambda **kw: gen_grouped_words(groups, **kw), 10),  # ↓ từ đơn dư
+            (lambda **kw: gen_mixed_line(singles, phrases, **kw), 15),
+            (
+                lambda **kw: gen_dense_sentence(phrases, singles, **kw),
+                25,
+            ),  # ↑ nhiều phrase/sample
+            (lambda **kw: gen_plain_words(singles, plain_singles, **kw), 10),  # chống bias thêm dấu
+        ]
 
     N_VAL = 100  # val cố định
     num_samples = args.num_train + args.num_test + N_VAL
 
     tw = sum(w for _, w in generators)
     counts = {i: int(num_samples * w / tw) for i, (_, w) in enumerate(generators)}
-    names = ["word_list", "phrase_list", "confusion", "grouped", "mixed", "dense"]
+    names = ["paragraph"] if args.stage2 else ["word_list", "phrase_list", "confusion", "grouped", "mixed", "dense", "plain_words"]
 
     print(
         f"\nPhân bổ {num_samples} samples (train {args.num_train} + val {N_VAL} + test {args.num_test}):"

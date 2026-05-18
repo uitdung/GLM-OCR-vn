@@ -177,7 +177,7 @@ data/
 *.pid
 .DS_Store
 
-tools/dataset/vietnamese_ocr/*
+tools/dataset/vietnamese_ocr*/*
 
-vietnamese_ocr.zip
+vietnamese_ocr*.zip
 glm-ocr-vn/
