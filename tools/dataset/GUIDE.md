@@ -241,7 +241,7 @@ GLM-OCR gốc được train cho tiếng Anh + tiếng Trung. Khi finetune cho t
 
 ```yaml
 finetuning_type: lora
-lora_rank: 8
+lora_rank: 16
 lora_alpha: 32
 lora_dropout: 0.1
 lora_target: all
@@ -447,11 +447,11 @@ LR
  └───────────────────────────────────→ steps
 ```
 
-### Lora_rank: 8
+### Lora_rank: 16
 
-- **Rank 8: khuyến nghị của tác giả GLM-OCR cho LoRA**
-- Rank 16: tăng capacity nhưng dễ overfit trên synthetic data
-- Rank 32-64: chỉ dùng khi data thật lớn (100K+ samples) hoặc Giai đoạn 2 (document-level)
+- **Rank 16: cân bằng tốt cho unfreezing projector + LoRA trên synthetic data**
+- Rank 8: quá hẹp khi unfreeze projector
+- Rank 32: có thể dùng nếu data lớn (100K+) hoặc Giai đoạn 2
 
 ### Learning rate: 1e-4
 
