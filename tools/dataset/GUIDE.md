@@ -27,10 +27,11 @@ Flow hoàn chỉnh từ sinh data → train → test local.
 |---|---|
 | Architecture | `GlmOcrForConditionalGeneration` |
 | Model type | `glm_ocr` |
-| Total params | **1,114,975,232** (~1.1B) |
-| Trainable params (LoRA rank 16) | 7,569,408 (~7.6M, 0.68%) |
-| LoRA targets | `q_proj`, `k_proj`, `v_proj`, `o_proj`, `gate_up_proj`, `down_proj` |
-| Compute dtype | bfloat16 (trainable params upcast to float32) |
+| Total params | **~1.1B** |
+| Trainable (LoRA rank 8) | ~7.5M (0.68%) |
+| LoRA targets | `all` (q_proj, k_proj, v_proj, o_proj, gate_proj, up_proj, down_proj, qkv, gate_up_proj, lm_head) |
+| Compute dtype | fp16 (T4) / bfloat16 (A100/L4) |
+| Image tokens | ~999 tokens cho ảnh 768×1024 (merge_size=2) |
 
 ### Text LLM
 
@@ -75,10 +76,28 @@ Flow hoàn chỉnh từ sinh data → train → test local.
 
 | Thuộc tính | Giá trị |
 |---|---|
-| Attention | torch SDPA |
+| Vision encoder | **frozen** (`freeze_vision_tower: true`) |
+| Multi-modal projector | **unfrozen** (`freeze_multi_modal_projector: false`) |
+| LLM | LoRA adapters trên tất cả linear layers |
 | Gradient checkpointing | enabled |
 | KV cache | disabled (during training) |
-| Vision model | frozen (`visual.patch_embed`, `visual.blocks`) |
+
+### Tokenizer tiếng Việt
+
+GLM-OCR dùng vocab size 59,392. Kết quả phân tích:
+
+| Từ | Token hóa | Số mảnh |
+|---|---|---|
+| `là` | `[' là']` | 1 ✅ |
+| `Việt` | `[' Việt']` | 1 ✅ |
+| `hóa` | `[' hóa']` | 1 ✅ |
+| `Nguyễn` | `['Ng', 'uy', 'ễn']` | 3 ⚠️ |
+| `Trãi` | `[' Tr', 'ãi']` | 2 ⚠️ |
+| `kiệt` | `[' k', 'iệt']` | 2 ⚠️ |
+
+- **Không có byte-fallback** → tokenizer đã chứa âm tiết tiếng Việt phổ biến
+- Từ phức tạp bị cắt 2-3 mảnh → Projector phải ánh xạ 1 khối hình → nhiều tokens
+- Ảnh 768×1024 tốn ~999 tokens, text 6-8 từ tốn ~20 tokens → tổng ~1020 tokens/sample
 
 ---
 
@@ -170,23 +189,24 @@ Mở `finetune_glm_ocr_vn_1epoch.ipynb` trên Colab (GPU T4 16GB).
 ```
 Bước 1-5: Setup (chỉ 1 lần đầu)
   1. Check GPU
-  2. Mount Drive & extract dataset
-  3. Install LLaMA-Factory
-  4. Download model gốc
-  5. Register dataset
+  2. Mount Drive & extract dataset từ My Drive/ocr_data/
+  3. Install LLaMA-Factory + pin transformers 5.6.0
+  4. Download model gốc từ HuggingFace
+  5. Register dataset (auto split train/val/test từ meta.json)
 
 Bước 6: Train (nhấn lại mỗi epoch)
   - Tự động detect checkpoint cũ để resume
-  - Checkpoint tự lưu thẳng lên Drive
+  - Checkpoint tự lưu thẳng lên Drive (My Drive/ocr_data/glm-ocr-vn-checkpoints)
+  - Eval chạy song song trên val set mỗi 500 steps
 
 Bước 7: Merge & Eval (sau mỗi epoch)
-  - Merge LoRA weights (lưu thẳng lên Drive)
-  - Chạy eval trên test set
+  - Merge LoRA weights (lưu thẳng lên Drive: My Drive/ocr_data/glm-ocr-vn)
+  - Chạy eval trên test set (số lượng từ meta.json)
   - Hiển thị bảng progress across all epochs
   - Tự động lưu kết quả eval lên Drive
 
 Bước 8: Test ảnh bất kỳ
-  - Upload 1 ảnh từ máy để test nhanh
+  - Upload 1 ảnh → so sánh kết quả Original vs Finetuned
 ```
 
 ### Quyết định train thêm hay dừng
@@ -200,26 +220,53 @@ Sau mỗi lần chạy eval, đọc bảng kết quả:
 | 90-95% | Có thể dừng, cân nhắc gen data mới |
 | >= 95% | Model đã sẵn sàng trên Drive (`My Drive/ocr_data/glm-ocr-vn/`) |
 
-Nếu epoch mới toàn dau (loss tang) -> overfitting, dùng checkpoint epoch trước.
+Nếu epoch mới toàn đỏ (loss tăng) → overfitting, dùng checkpoint epoch trước.
 
-### Cấu hình training hiện tại
+### Chiến lược Curriculum Learning (2 giai đoạn)
+
+GLM-OCR gốc được train cho tiếng Anh + tiếng Trung. Khi finetune cho tiếng Việt, nên chia 2 giai đoạn:
+
+**Giai đoạn 1: Text-line Alignment** (hiện tại)
+- Dữ liệu: ảnh dòng text ngắn 6-8 từ tiếng Việt (synthetic data)
+- Mục tiêu: dạy Projector ánh xạ ký tự có dấu tiếng Việt → token
+- Config: `cutoff_len: 2048`, `lora_rank: 8`
+- Tham chiếu: paper VARY, TrOCR, Monkey
+
+**Giai đoạn 2: Document-level SFT** (tương lai)
+- Dữ liệu: ảnh tài liệu/hóa đơn/book thật, text dài
+- Mục tiêu: dạy LLM đọc hiểu ngữ cảnh, format
+- Config: `cutoff_len: 4096`, có thể tăng `lora_rank: 16-32`
+
+### Cấu hình training hiện tại (Giai đoạn 1)
 
 ```yaml
 finetuning_type: lora
 lora_rank: 8
-lora_alpha: 16
+lora_alpha: 32
 lora_dropout: 0.1
 lora_target: all
+freeze_vision_tower: true
+freeze_multi_modal_projector: false   # Unfreeze để Projector học dấu TV
 
 learning_rate: 1.0e-4
-lr_scheduler_type: constant_with_warmup
+lr_scheduler_type: constant_with_warmup   # LR ổn định khi resume
 warmup_ratio: 0.05
-num_train_epochs: 1                 # train tung epoch
+num_train_epochs: 1                     # train từng epoch
 
-val_size: 0.01                      # 1% val split
-eval_strategy: steps                 # chay eval moi 500 step
-eval_steps: 500
+cutoff_len: 2048
+per_device_train_batch_size: 4
+gradient_accumulation_steps: 4          # effective batch = 16
+
+fp16: true                              # T4 dùng fp16, A100/L4 đổi bf16
 ```
+
+### Tại sao unfreeze Multi-modal Projector?
+
+Khi dùng LoRA, LLM chỉ học qua adapters nhỏ. Nếu khóa luôn cả Projector:
+- LLM không đủ capacity học tiếng Việt mới
+- Projector không học cách ánh xạ dấu tiếng Việt → token bị cắt nhỏ
+- Unfreeze Projector cho phép model xây "từ điển thị giác" mới cho tiếng Việt
+- Projector nhỏ (~vài triệu params), tốn thêm ~1-2GB VRAM
 
 ---
 
@@ -393,7 +440,7 @@ LR ramp up trong 5% bước đầu, sau đó giữ cố định. Cho phép **res
 
 ```
 LR
- │    ╭────────────────────────────── 5e-05 (cố định)
+ │    ╭────────────────────────────── 1e-04 (cố định)
  │   ╱
  │  ╱ warmup (5% steps)
  │ ╱
@@ -402,15 +449,31 @@ LR
 
 ### Lora_rank: 8
 
-- **Rank 8: khuyến nghị của tác giả GLM-OCR**, đủ cho domain adaptation
+- **Rank 8: khuyến nghị của tác giả GLM-OCR cho LoRA**
 - Rank 16: tăng capacity nhưng dễ overfit trên synthetic data
-- Rank 32: quá nhiều, overfit risk cao
+- Rank 32-64: chỉ dùng khi data thật lớn (100K+ samples) hoặc Giai đoạn 2 (document-level)
 
 ### Learning rate: 1e-4
 
 - **1e-4: khuyến nghị của tác giả GLM-OCR cho LoRA**
-- 5e-5: dùng được nhưng học chậm hơn
-- 1e-5: quá thấp cho LoRA, học rất chậm
+- 5e-5: dùng được nhưng học chậm hơn, phù hợp rank 16
+- 1e-5: quá thấp cho LoRA, chỉ dùng cho full fine-tuning
+
+### Freeze strategy
+
+| Thành phần | Trạng thái | Lý do |
+|---|---|---|
+| Vision Encoder | **Frozen** | Đã được pretrain tốt, không cần học lại |
+| Multi-modal Projector | **Unfrozen** | Cần học ánh xạ mới cho dấu tiếng Việt |
+| LLM | **LoRA** | Học tiếng Việt qua adapters, giữ kiến thức gốc |
+
+### GPU T4 (16GB) — Thông số thực tế
+
+```
+VRAM sử dụng: ~6.9/15 GB (còn dư ~8 GB)
+Speed: ~1.6s/step trên 60K samples (2 tiếng/epoch)
+Effective batch size: 16 (4 device × 4 accum)
+```
 
 ---
 
