@@ -145,7 +145,7 @@ def main():
     parser.add_argument("--output", type=str, default="vietnamese_ocr_s2", help="Output dir")
     parser.add_argument("--strip_ratio", type=float, default=0.3, help="Tỷ lệ strip dấu")
     parser.add_argument("--num_test", type=int, default=100)
-    parser.add_argument("--num_val", type=int, default=0)
+    parser.add_argument("--num_val", type=int, default=200)
     parser.add_argument("--augment_copies", type=int, default=1, help="Số bản augment (1=không)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
