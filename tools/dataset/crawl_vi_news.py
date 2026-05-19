@@ -103,9 +103,9 @@ def fetch_article(url):
         return []
 
 
-def chunk_paragraphs(paragraphs, min_lines=2, max_lines=5, min_words_per_line=8, max_words_per_line=25):
+def chunk_paragraphs(paragraphs, min_lines=2, max_lines=10, min_words_per_line=8, max_words_per_line=25):
     """
-    Gom đoạn văn thành chunks 2-5 dòng.
+    Gom đoạn văn thành chunks 2-10 dòng.
     Mỗi dòng 8-25 từ (để vừa ảnh).
     """
     chunks = []
@@ -144,8 +144,8 @@ def main():
     parser.add_argument("--num_images", type=int, default=5000, help="Số ảnh cần gen")
     parser.add_argument("--output", type=str, default="vietnamese_ocr_s2", help="Output dir")
     parser.add_argument("--strip_ratio", type=float, default=0.3, help="Tỷ lệ strip dấu")
-    parser.add_argument("--num_test", type=int, default=300)
-    parser.add_argument("--num_val", type=int, default=100)
+    parser.add_argument("--num_test", type=int, default=100)
+    parser.add_argument("--num_val", type=int, default=0)
     parser.add_argument("--augment_copies", type=int, default=1, help="Số bản augment (1=không)")
     parser.add_argument("--seed", type=int, default=42)
     args = parser.parse_args()
