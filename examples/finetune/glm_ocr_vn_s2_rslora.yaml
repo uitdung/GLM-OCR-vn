@@ -1,0 +1,59 @@
+# ============================================================================
+# Stage 2: News Document-Level SFT — rsLoRA Config (v2 — tối ưu)
+# ============================================================================
+# Thay đổi so với v1:
+#   - use_rslora: true        ← rank-stabilized LoRA
+#   - Dataset tăng lên 15000  ← thay 10000 (crawl_vi_news.py --num_images 15000)
+#
+# Cách dùng: Copy nội dung này vào cell Stage 2 YAML của notebook Colab
+# ============================================================================
+
+### model
+model_name_or_path: /content/GLM-OCR
+adapter_name_or_path: {s1_last}   # ← Load Stage 1 checkpoint (thay bằng path thực tế)
+trust_remote_code: true
+
+### method
+stage: sft
+do_train: true
+finetuning_type: lora
+lora_rank: 16
+lora_alpha: 32
+lora_dropout: 0.1
+use_rslora: true              # ← MỚI: rank-stabilized LoRA
+lora_target: all
+freeze_vision_tower: true
+freeze_multi_modal_projector: false
+
+### dataset
+dataset: vietnamese_ocr_s2
+eval_dataset: vietnamese_ocr_s2_val
+template: glm_ocr
+cutoff_len: 4096
+preprocessing_num_workers: 8
+
+### eval
+eval_strategy: steps
+eval_steps: 100
+per_device_eval_batch_size: 1
+load_best_model_at_end: true
+metric_for_best_model: eval_loss
+early_stopping_patience: 3
+
+### output
+output_dir: '/content/drive/My Drive/ocr_data/glm-ocr-vn-s2-checkpoints'
+logging_steps: 10
+save_steps: 500
+plot_loss: true
+overwrite_output_dir: false
+save_only_model: false
+report_to: none
+
+### train
+per_device_train_batch_size: 2
+gradient_accumulation_steps: 8
+learning_rate: 5.0e-5
+num_train_epochs: 1
+lr_scheduler_type: constant_with_warmup
+warmup_ratio: 0.05
+fp16: true

@@ -114,7 +114,7 @@ Ngoài ra cần cài [LLaMA-Factory](https://github.com/hiyouga/LLaMA-Factory) n
 ## 2. Sinh dataset
 
 ```bash
-python generate_vietnamese_dataset_v3.py --num_samples 20000 --augment_copies 3 --test_ratio 0.1
+python prepare/generate_stage1.py --num_train 20000 --augment_copies 3 --output_dir ./data/vietnamese_ocr
 ```
 
 ### Các tham số
@@ -122,9 +122,9 @@ python generate_vietnamese_dataset_v3.py --num_samples 20000 --augment_copies 3 
 | Tham số | Mặc định | Mô tả |
 |---|---|---|
 | `--output_dir` | `./vietnamese_ocr` | Thư mục output |
-| `--num_samples` | `2000` | Số ảnh gốc (unique texts) |
+| `--num_train` | `20000` | Số mẫu train (unique texts) |
+| `--num_test` | `100` | Số mẫu test (val cố định 100) |
 | `--augment_copies` | `1` | Số bản/ảnh gốc (`3` = 1 gốc + 2 augment) |
-| `--test_ratio` | `0.1` | Tỷ lệ test set (10%) |
 | `--seed` | `42` | Random seed |
 | `--no_augment` | off | Sinh ảnh sạch, không augmentation |
 
@@ -132,14 +132,14 @@ python generate_vietnamese_dataset_v3.py --num_samples 20000 --augment_copies 3 
 
 | Mục đích | Lệnh |
 |---|---|
-| **Train chất lượng cao** | `--num_samples 20000 --augment_copies 3 --test_ratio 0.1` |
-| **Nhanh, test thử** | `--num_samples 5000 --augment_copies 2 --test_ratio 0.1` |
-| **Ảnh sạch (publish)** | `--num_samples 10000 --no_augment` |
+| **Train chất lượng cao** | `--num_train 20000 --augment_copies 3 --test_ratio 0.1` |
+| **Nhanh, test thử** | `--num_train 5000 --augment_copies 2 --test_ratio 0.1` |
+| **Ảnh sạch (publish)** | `--num_train 10000 --no_augment` |
 
 ### Output
 
 ```
-vietnamese_ocr/
+data/vietnamese_ocr/
 ├── vietnamese_ocr.json          # Tất cả samples (backward compat)
 ├── vietnamese_ocr_train.json    # 90% — dùng để train
 ├── vietnamese_ocr_test.json     # 10% — dùng để đánh giá
@@ -172,17 +172,17 @@ Model học chịu được biến dạng thực tế qua các loại augmentati
 ### Upload lên Google Drive
 
 ```bash
-# PowerShell
-Compress-Archive -Path vietnamese_ocr -DestinationPath vietnamese_ocr.zip -Force
+# PowerShell — chạy từ thư mục dataset/
+powershell Compress-Archive -Path data/vietnamese_ocr -DestinationPath data/vietnamese_ocr.zip -Force
 ```
 
-Upload `vietnamese_ocr.zip` vào Google Drive `My Drive/ocr_data/`.
+Upload `data/vietnamese_ocr.zip` vào Google Drive `My Drive/ocr_data/`.
 
 ---
 
 ## 3. Fine-tune trên Google Colab
 
-Mở `finetune_glm_ocr_vn_1epoch.ipynb` trên Colab (GPU T4 16GB).
+Mở `train/finetune.ipynb` trên Colab (GPU T4 16GB).
 
 ### Flow từng bước
 
@@ -274,7 +274,7 @@ Khi dùng LoRA, LLM chỉ học qua adapters nhỏ. Nếu khóa luôn cả Proje
 
 Sau khi train xong, tải thư mục model từ Drive (`glm-ocr-vn`) về máy.
 
-### Tham số `test_local.py`
+### Tham số `eval/run_inference.py`
 
 | Tham số | Mặc định | Mô tả |
 |---|---|---|
@@ -287,16 +287,16 @@ Sau khi train xong, tải thư mục model từ Drive (`glm-ocr-vn`) về máy.
 
 ```bash
 # Test 1 ảnh
-npm run test:image -- --model_path ./glm-ocr-vn --image test.png
+npm run eval:run -- --model_path ./glm-ocr-vn --image test.png
 
 # Test nhiều ảnh
-npm run test:image -- --model_path ./glm-ocr-vn --image img1.png img2.png img3.png
+npm run eval:run -- --model_path ./glm-ocr-vn --image img1.png img2.png img3.png
 
 # Test toàn bộ thư mục
-npm run test:image -- --model_path ./glm-ocr-vn --image ./test_images/
+npm run eval:run -- --model_path ./glm-ocr-vn --image ./test_images/
 
 # Đổi loại task
-npm run test:image -- --model_path ./glm-ocr-vn --image table.png --task table
+npm run eval:run -- --model_path ./glm-ocr-vn --image table.png --task table
 ```
 
 ### Yêu cầu
@@ -311,28 +311,28 @@ npm run test:image -- --model_path ./glm-ocr-vn --image table.png --task table
 
 Chạy trên test set để xem fine-tune cải thiện bao nhiêu.
 
-### Tham số `compare_models.py`
+### Tham số `eval/evaluate.py`
 
 | Tham số | Mặc định | Mô tả |
 |---|---|---|
 | `--ft_path` | `./glm-ocr-vn` | Đường dẫn model finetuned |
-| `--test_json` | `./vietnamese_ocr/vietnamese_ocr_test.json` | File test set JSON |
+| `--test_json` | `./data/vietnamese_ocr/vietnamese_ocr_test.json` | File test set JSON |
 | `--n` | `0` | Số ảnh test. `0` = tất cả, `5` = nhanh |
 
 ### Ví dụ
 
 ```bash
 # Test toàn bộ test set (chính xác nhất, chậm)
-npm run test:compare
+npm run eval:compare
 
 # Test nhanh 5 ảnh (seed=42 cố định, tái lập được)
-npm run test:compare -- --n 5
+npm run eval:compare -- --n 5
 
 # Test 100 ảnh
-npm run test:compare -- --n 100
+npm run eval:compare -- --n 100
 
 # Chỉ định model và test set khác
-npm run test:compare -- --ft_path ./my-model --test_json ./data/test.json
+npm run eval:compare -- --ft_path ./my-model --test_json ./data/test.json
 ```
 
 Script tự động:
@@ -515,7 +515,7 @@ vietnam-dict-words.txt (36,534 từ)
 
 ### `ValueError: image has wrong mode` khi gen data
 
-PIL GaussianBlur không hỗ trợ float32. Đã fix trong code bằng cách map qua uint8. Đảm bảo dùng bản mới nhất của `generate_vietnamese_dataset_v3.py`.
+PIL GaussianBlur không hỗ trợ float32. Đã fix trong code bằng cách map qua uint8. Đảm bảo dùng bản mới nhất của `prepare/generate_stage1.py`.
 
 ### `OSError: no file named model.safetensors` khi test local
 

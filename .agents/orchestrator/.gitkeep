@@ -1,0 +1,6 @@
+# Orchestrator Workspace — Báo cáo Đồ án MLLM OCR Tiếng Việt
+
+Working dir: `c:\project\uit\nlp\GLM-OCR\.agents\orchestrator`
+Mission: Write 20-30 page Vietnamese technical report on "Nghiên cứu và Finetune MLLM cho OCR Tiếng Việt" — GLM-OCR case study.
+Output: `c:\project\uit\nlp\GLM-OCR\docs\bao_cao_do_an_MLLM_OCR_Tieng_Viet.md`
+Parent (Sentinel) conversation ID: `9abe4869-a361-45a4-a22f-44635a8b8e11`

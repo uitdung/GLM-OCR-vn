@@ -5,8 +5,8 @@ from transformers import AutoProcessor, AutoModelForImageTextToText
 import torch, json, editdistance
 
 parser = argparse.ArgumentParser(description="So sánh Original vs Finetuned GLM-OCR")
-parser.add_argument("--ft_path", type=str, default="./glm-ocr-vn", help="Đường dẫn model finetuned")
-parser.add_argument("--test_json", type=str, default="./vietnamese_ocr/vietnamese_ocr_test.json", help="Test set JSON")
+parser.add_argument("--ft_path", type=str, default="../glm-ocr-vn", help="Đường dẫn model finetuned")
+parser.add_argument("--test_json", type=str, default="../data/vietnamese_ocr/vietnamese_ocr_test.json", help="Test set JSON")
 parser.add_argument("--n", type=int, default=0, help="Số ảnh test (0 = tất cả)")
 args = parser.parse_args()
 

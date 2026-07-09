@@ -26,63 +26,19 @@ import numpy as np
 from PIL import Image, ImageDraw, ImageEnhance, ImageFilter, ImageFont
 
 VERIFIED_FONTS = [
+    # 5 họ font thực tế nhất trong tài liệu/web tiếng Việt (12 variant)
     "C:/Windows/Fonts/arial.ttf",
     "C:/Windows/Fonts/arialbd.ttf",
-    "C:/Windows/Fonts/arialbi.ttf",
     "C:/Windows/Fonts/ariali.ttf",
+    "C:/Windows/Fonts/times.ttf",
+    "C:/Windows/Fonts/timesbd.ttf",
+    "C:/Windows/Fonts/timesi.ttf",
     "C:/Windows/Fonts/calibri.ttf",
     "C:/Windows/Fonts/calibrib.ttf",
     "C:/Windows/Fonts/calibrii.ttf",
-    "C:/Windows/Fonts/calibril.ttf",
-    "C:/Windows/Fonts/calibrili.ttf",
-    "C:/Windows/Fonts/calibriz.ttf",
-    "C:/Windows/Fonts/cambria.ttc",
-    "C:/Windows/Fonts/cambriab.ttf",
-    "C:/Windows/Fonts/cambriai.ttf",
-    "C:/Windows/Fonts/cambriaz.ttf",
-    "C:/Windows/Fonts/Candara.ttf",
-    "C:/Windows/Fonts/Candarab.ttf",
-    "C:/Windows/Fonts/Candarai.ttf",
-    "C:/Windows/Fonts/Candaraz.ttf",
-    "C:/Windows/Fonts/consola.ttf",
-    "C:/Windows/Fonts/consolab.ttf",
-    "C:/Windows/Fonts/consolai.ttf",
-    "C:/Windows/Fonts/consolaz.ttf",
-    "C:/Windows/Fonts/constan.ttf",
-    "C:/Windows/Fonts/constanb.ttf",
-    "C:/Windows/Fonts/constani.ttf",
-    "C:/Windows/Fonts/constanz.ttf",
-    "C:/Windows/Fonts/cour.ttf",
-    "C:/Windows/Fonts/courbd.ttf",
-    "C:/Windows/Fonts/couri.ttf",
-    "C:/Windows/Fonts/pala.ttf",
-    "C:/Windows/Fonts/palab.ttf",
-    "C:/Windows/Fonts/palabi.ttf",
-    "C:/Windows/Fonts/palai.ttf",
-    "C:/Windows/Fonts/segoeui.ttf",
-    "C:/Windows/Fonts/segoeuib.ttf",
-    "C:/Windows/Fonts/segoeuii.ttf",
-    "C:/Windows/Fonts/segoeuil.ttf",
-    "C:/Windows/Fonts/segoeuisl.ttf",
-    "C:/Windows/Fonts/segoeuiz.ttf",
-    "C:/Windows/Fonts/seguibl.ttf",
-    "C:/Windows/Fonts/seguibli.ttf",
-    "C:/Windows/Fonts/seguisb.ttf",
-    "C:/Windows/Fonts/seguisbi.ttf",
-    "C:/Windows/Fonts/seguisli.ttf",
-    "C:/Windows/Fonts/SegUIVar.ttf",
-    "C:/Windows/Fonts/SitkaVF.ttf",
-    "C:/Windows/Fonts/SitkaVF-Italic.ttf",
     "C:/Windows/Fonts/tahoma.ttf",
     "C:/Windows/Fonts/tahomabd.ttf",
-    "C:/Windows/Fonts/times.ttf",
-    "C:/Windows/Fonts/timesbd.ttf",
-    "C:/Windows/Fonts/timesbi.ttf",
-    "C:/Windows/Fonts/timesi.ttf",
-    "C:/Windows/Fonts/verdana.ttf",
-    "C:/Windows/Fonts/verdanab.ttf",
-    "C:/Windows/Fonts/verdanai.ttf",
-    "C:/Windows/Fonts/verdanaz.ttf",
+    "C:/Windows/Fonts/segoeui.ttf",
 ]
 
 
@@ -92,7 +48,8 @@ VERIFIED_FONTS = [
 
 
 def load_hard_words():
-    src = Path(__file__).parent / "dictionary" / "vietnamese_words_clean.txt"
+    # data/dictionary/ — nằm ngoài prepare/, đi lên 2 cấp từ prepare/
+    src = Path(__file__).resolve().parent.parent / "data" / "dictionary" / "vietnamese_words_clean.txt"
     with open(src, "r", encoding="utf-8") as f:
         words = [line.strip() for line in f if line.strip()]
 
@@ -123,6 +80,28 @@ def load_hard_words():
             break
 
     return singles, phrases, groups, confusion, plain_singles
+
+
+# ============================================================================
+# ENGLISH WORDS — chống thêm dấu bừa vào text không phải tiếng Việt
+# ============================================================================
+
+
+ENGLISH_WORDS = [
+    "hello", "world", "system", "data", "model", "code", "test", "file",
+    "user", "name", "password", "email", "phone", "address", "search",
+    "click", "button", "submit", "cancel", "delete", "update", "create",
+    "open", "close", "save", "print", "copy", "paste", "edit", "view",
+    "home", "about", "help", "settings", "account", "login", "logout",
+    "register", "download", "upload", "share", "export", "import",
+    "python", "java", "javascript", "html", "css", "json", "api", "url",
+    "server", "client", "database", "network", "security", "error",
+    "warning", "version", "install", "config", "default", "source",
+    "project", "module", "function", "class", "method", "return",
+    "string", "number", "array", "object", "null", "true", "false",
+    "google", "facebook", "youtube", "github", "docker", "linux",
+    "windows", "android", "iphone", "chrome", "firefox", "safari",
+]
 
 
 # ============================================================================
@@ -160,55 +139,68 @@ def render(text, fp, fs=24, bg=(255, 255, 255), tc=(0, 0, 0), pad=25, ls=8):
     return img
 
 
+def wrap_text(text, font, max_width):
+    """Tách text thành các dòng sao cho mỗi dòng không vượt max_width (pixel).
+
+    Input text: có thể chưa có '\n' (câu liền mạch).
+    Output: list[str] — các dòng đã wrap.
+    """
+    words = text.split()
+    lines = []
+    cur = ""
+    for w in words:
+        candidate = (cur + " " + w).strip()
+        if font.getbbox(candidate)[2] <= max_width or not cur:
+            cur = candidate
+        else:
+            lines.append(cur)
+            cur = w
+    if cur:
+        lines.append(cur)
+    return lines
+
+
+def render_wrapped(text, fp, fs=24, bg=(255, 255, 255), tc=(0, 0, 0),
+                   pad=25, ls=8, max_width=900):
+    """Render text thành ảnh, tự xuống dòng theo max_width (pixel).
+
+    KHÔNG chèn '\n' vào text gốc — chỉ ảnh mới có xuống dòng.
+    Ground-truth text giữ nguyên cấu trúc câu (liền mạch).
+    """
+    font = load_font(fp, fs)
+    lines = wrap_text(text, font, max_width - pad * 2)
+    lh = fs + ls
+    img = Image.new("RGB", (max_width, len(lines) * lh + pad * 2), bg)
+    d = ImageDraw.Draw(img)
+    y = pad
+    for l in lines:
+        d.text((pad, y), l, fill=tc, font=font)
+        y += lh
+    return img
+
+
 # ============================================================================
 # AUGMENTATION
 # ============================================================================
 
 
-def _perspective_coeffs(src_pts, dst_pts):
-    """Compute 8 perspective transform coefficients for PIL Image.transform.
-    Maps dst_pts -> src_pts."""
-    matrix = []
-    result = []
-    for (sx, sy), (dx, dy) in zip(src_pts, dst_pts):
-        matrix.append([dx, dy, 1, 0, 0, 0, -dx * sx, -dy * sx])
-        result.append(sx)
-        matrix.append([0, 0, 0, dx, dy, 1, -dx * sy, -dy * sy])
-        result.append(sy)
-    coeffs = np.linalg.solve(
-        np.array(matrix, dtype=np.float64), np.array(result, dtype=np.float64)
-    )
-    return coeffs.tolist()
+
 
 
 def augment(img, allow_none=True):
-    """Augmentation cho OCR van ban - gia lap anh chuc thuc te."""
+    """Augmentation NHẸ cho dấu tiếng Việt — dấu thanh rất nhỏ, cần chính xác tinh tế.
+
+    Chỉ giữ 4 loại augmentation nhẹ (blur, noise, jpeg, rotate) ở cường độ thấp.
+    Bỏ shadow/perspective/wave/elastic/glare/defocus — chúng làm mờ/méo dấu thanh.
+    """
     choices = [
-        "none",
-        "none",
-        "none",
-        "none",
-        "none",  # 40% giữ nguyên — model học dấu rõ ràng
-        "blur",
-        "blur",  # giảm từ 3→2, blur nhẹ hơn
-        "noise",
-        "noise",  # giảm từ 4→2
-        "contrast_down",
-        "contrast_up",
-        "jpeg",
-        "jpeg",  # giảm từ 3→2
-        "rotate",
-        "rotate",  # giảm từ 3→2
-        "shadow",
-        "shadow",  # giảm từ 4→2
-        "glare",  # giảm từ 3→1
-        "perspective",
-        "perspective",  # giảm từ 3→2
-        "downscale",  # giảm từ 2→1
-        "wave",  # hiếm
-        "elastic",  # hiếm
-        "motion_blur",  # giảm từ 2→1
-        "defocus",  # giảm từ 2→1
+        "none", "none", "none", "none", "none",
+        "none", "none", "none", "none", "none",
+        "none", "none", "none",  # 65% clean — dấu TV cần chính xác tuyệt đối
+        "blur", "blur",           # blur nhẹ
+        "noise", "noise",         # noise thấp
+        "jpeg", "jpeg",           # nén jpeg trung bình
+        "rotate",                 # xoay nhẹ
     ]
     if not allow_none:
         choices = [c for c in choices if c != "none"]
@@ -216,189 +208,22 @@ def augment(img, allow_none=True):
     if a == "none":
         pass
     elif a == "blur":
-        img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.8)))
+        img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.6)))
     elif a == "noise":
         arr = np.array(img)
-        intensity = random.randint(15, 35)  # noise vừa đủ, không che dấu
+        intensity = random.randint(10, 25)  # thấp — dấu TV rất nhỏ
         n = np.random.randint(0, intensity, arr.shape, dtype=np.uint8)
         offset = intensity // 2
         img = Image.fromarray(
             np.clip(arr.astype(int) + n.astype(int) - offset, 0, 255).astype(np.uint8)
         )
-    elif a == "contrast_up":
-        img = ImageEnhance.Contrast(img).enhance(random.uniform(1.1, 1.5))
-    elif a == "contrast_down":
-        img = ImageEnhance.Contrast(img).enhance(random.uniform(0.65, 0.9))
     elif a == "jpeg":
         buf = io.BytesIO()
-        img.save(buf, format="JPEG", quality=random.randint(55, 80))
+        img.save(buf, format="JPEG", quality=random.randint(65, 85))
         buf.seek(0)
         img = Image.open(buf).convert("RGB")
     elif a == "rotate":
-        img = img.rotate(random.uniform(-3, 3), fillcolor=(255, 255, 255), expand=False)
-    elif a == "shadow":
-        # Shadow thực tế: gradient mềm, chéo từ 1 hướng
-        arr = np.array(img, dtype=np.float32)
-        h, w = arr.shape[:2]
-        for _ in range(random.randint(1, 2)):
-            # Chọn hướng ánh sáng (shadow từ đối diện)
-            direction = random.choice(["top", "bottom", "left", "right", "corner"])
-            darkness = random.randint(30, 70)
-
-            # Tạo mask gradient theo hướng (dùng numpy, không loop)
-            mask = np.zeros((h, w), dtype=np.float32)
-            if direction == "top":
-                ys = np.linspace(1, 0, h)[:, np.newaxis]
-                mask = np.clip(ys / random.uniform(0.4, 0.7), 0, 1)
-                mask = np.broadcast_to(mask, (h, w)).copy()
-            elif direction == "bottom":
-                ys = np.linspace(0, 1, h)[:, np.newaxis]
-                mask = np.clip(ys / random.uniform(0.4, 0.7), 0, 1)
-                mask = np.broadcast_to(mask, (h, w)).copy()
-            elif direction == "left":
-                xs = np.linspace(1, 0, w)[np.newaxis, :]
-                mask = np.clip(xs / random.uniform(0.4, 0.7), 0, 1)
-                mask = np.broadcast_to(mask, (h, w)).copy()
-            elif direction == "right":
-                xs = np.linspace(0, 1, w)[np.newaxis, :]
-                mask = np.clip(xs / random.uniform(0.4, 0.7), 0, 1)
-                mask = np.broadcast_to(mask, (h, w)).copy()
-            else:  # corner
-                cx, cy = random.choice([(0, 0), (w, 0), (0, h), (w, h)])
-                yy, xx = np.mgrid[0:h, 0:w]
-                dist = np.sqrt((xx - cx) ** 2 + (yy - cy) ** 2)
-                max_dist = math.sqrt(w**2 + h**2) * random.uniform(0.3, 0.6)
-                mask = np.clip(1 - dist / max_dist, 0, 1)
-
-            # Làm mượt mask để shadow có edge mềm
-            mask = (
-                np.array(
-                    Image.fromarray((mask * 255).astype(np.uint8)).filter(
-                        ImageFilter.GaussianBlur(radius=random.uniform(8, 25))
-                    )
-                ).astype(np.float32)
-                / 255.0
-            )
-
-            # Áp dụng shadow
-            shadow = (mask * darkness)[:, :, np.newaxis]
-            arr = np.clip(arr - shadow, 0, 255)
-        img = Image.fromarray(arr.astype(np.uint8))
-    elif a == "glare":
-        arr = np.array(img)
-        h, w = arr.shape[:2]
-        for _ in range(random.randint(1, 2)):
-            x1 = random.randint(0, w // 2)
-            y1 = random.randint(0, h // 2)
-            x2 = x1 + random.randint(w // 4, w // 2)
-            y2 = y1 + random.randint(h // 4, h // 2)
-            brightness = random.randint(35, 70)
-            arr[y1:y2, x1:x2] = np.clip(
-                arr[y1:y2, x1:x2].astype(int) + brightness, 0, 255
-            ).astype(np.uint8)
-        img = Image.fromarray(arr)
-    elif a == "perspective":
-        w, h = img.size
-        offset = min(w, h) * random.uniform(0.02, 0.07)
-        src_corners = [(0, 0), (w, 0), (w, h), (0, h)]
-        dst_corners = [
-            (random.uniform(0, offset), random.uniform(0, offset)),
-            (w - random.uniform(0, offset), random.uniform(0, offset)),
-            (w - random.uniform(0, offset), h - random.uniform(0, offset)),
-            (random.uniform(0, offset), h - random.uniform(0, offset)),
-        ]
-        coeffs = _perspective_coeffs(src_corners, dst_corners)
-        img = img.transform(
-            (w, h), Image.PERSPECTIVE, coeffs, Image.BICUBIC, fillcolor=(255, 255, 255)
-        )
-    elif a == "downscale":
-        # Giảm nhẹ kích thước rồi phóng lại — mô phỏng ảnh chụp xa
-        w, h = img.size
-        scale = random.uniform(0.75, 0.92)  # nhẹ nhàng, vẫn đọc được
-        small = img.resize(
-            (max(int(w * scale), 16), max(int(h * scale), 16)), Image.BILINEAR
-        )
-        img = small.resize((w, h), Image.BILINEAR)
-    elif a == "wave":
-        # Mô phỏng chữ trên trang sách bị cong — dịch chuyển dạng sóng sin
-        w, h = img.size
-        arr = np.array(img)
-        result = np.full_like(arr, 255)  # nền trắng
-        amplitude = random.uniform(2, 10)  # độ lệch pixel
-        freq = random.uniform(0.8, 2.0)  # số vòng sóng
-        for y in range(h):
-            dx = int(amplitude * math.sin(2 * math.pi * freq * y / h))
-            src_start = max(0, -dx)
-            src_end = min(w, w - dx)
-            dst_start = max(0, dx)
-            length = src_end - src_start
-            if length > 0:
-                result[y, dst_start : dst_start + length] = arr[y, src_start:src_end]
-        img = Image.fromarray(result)
-    elif a == "elastic":
-        # Mô phỏng giấy nhăn/bẹp — biến dạng elastic ngẫu nhiên mượt
-        w, h = img.size
-        arr = np.array(img)
-        result = np.full_like(arr, 255)
-        scale = random.uniform(4, 9)
-        sigma = random.uniform(3, 6)
-        # Tạo displacement field ngẫu nhiên
-        dx = np.random.uniform(-scale, scale, (h, w)).astype(np.float32)
-        dy = np.random.uniform(-scale, scale, (h, w)).astype(np.float32)
-
-        # Làm mượt: map [-scale,scale] → [0,255] → blur → map lại
-        def _smooth_field(field, radius, s):
-            u8 = ((field + s) / (2 * s) * 255).astype(np.uint8)
-            u8 = np.array(
-                Image.fromarray(u8).filter(ImageFilter.GaussianBlur(radius=radius))
-            )
-            return (u8.astype(np.float32) / 255) * (2 * s) - s
-
-        dx = _smooth_field(dx, sigma, scale)
-        dy = _smooth_field(dy, sigma, scale)
-        # Áp dụng displacement
-        y_idx, x_idx = np.mgrid[0:h, 0:w]
-        x_new = np.clip(x_idx + dx.astype(int), 0, w - 1)
-        y_new = np.clip(y_idx + dy.astype(int), 0, h - 1)
-        result[y_idx, x_idx] = arr[y_new, x_new]
-        img = Image.fromarray(result)
-    elif a == "motion_blur":
-        # Mô phỏng rung tay khi chụp — nhòe theo một hướng
-        w, h = img.size
-        arr = np.array(img, dtype=np.float32)
-        result = np.zeros_like(arr)
-        kernel_size = random.randint(5, 12)
-        angle = random.uniform(0, 360)
-        dx = math.cos(math.radians(angle))
-        dy = math.sin(math.radians(angle))
-        for i in range(kernel_size):
-            t = i - kernel_size // 2
-            shift_x = int(round(dx * t))
-            shift_y = int(round(dy * t))
-            shifted = np.zeros_like(arr)
-            y_src_start = max(0, shift_y)
-            y_dst_start = max(0, -shift_y)
-            y_len = h - abs(shift_y)
-            x_src_start = max(0, shift_x)
-            x_dst_start = max(0, -shift_x)
-            x_len = w - abs(shift_x)
-            if y_len > 0 and x_len > 0:
-                shifted[
-                    y_src_start : y_src_start + y_len, x_src_start : x_src_start + x_len
-                ] = arr[
-                    y_dst_start : y_dst_start + y_len, x_dst_start : x_dst_start + x_len
-                ]
-            result += shifted
-        result = np.clip(result / kernel_size, 0, 255).astype(np.uint8)
-        img = Image.fromarray(result)
-    elif a == "defocus":
-        # Mô phỏng lệch tiêu cự — nhòe tròn (disk blur)
-        radius = random.uniform(1.5, 3.0)
-        img = img.filter(ImageFilter.GaussianBlur(radius=radius))
-        # Giảm nét thêm một chút để giống out-of-focus thật
-        arr = np.array(img, dtype=np.float32)
-        noise = np.random.normal(0, random.uniform(3, 8), arr.shape)
-        img = Image.fromarray(np.clip(arr + noise, 0, 255).astype(np.uint8))
+        img = img.rotate(random.uniform(-2, 2), fillcolor=(255, 255, 255), expand=False)
     return img
 
 
@@ -488,10 +313,8 @@ def make_result(text, idx, img_dir, fonts, no_augment):
 
 
 def gen_word_list(singles, fonts, img_dir, idx, no_augment=False):
-    n = random.randint(8, 16)
-    words = random.sample(singles, min(n, len(singles)))
-    random.shuffle(words)
-    text = "  ".join(words)
+    """Mỗi ảnh chỉ 1 từ đơn tiếng Việt — tránh LLM suy luận ngữ pháp."""
+    text = random.choice(singles)
     text = unique(text)
     if not text:
         return None
@@ -510,21 +333,9 @@ def gen_phrase_list(phrases, fonts, img_dir, idx, no_augment=False):
 
 
 def gen_confusion_pair(confusion, singles, fonts, img_dir, idx, no_augment=False):
+    """Cặp 2 từ khác nhau 1 ký tự, cách nhau bởi dấu phẩy. Ngắn gọn, không câu."""
     w1, w2 = random.choice(confusion)
-    templates = [
-        f"{w1} khác {w2}",
-        f"{w1} và {w2}",
-        f"phân biệt {w1} với {w2}",
-        f"không phải {w1} mà là {w2}",
-        f"từ {w1} đến {w2}",
-        f"{w1} hay {w2}",
-        f"{w2} chứ không phải {w1}",
-        f"viết đúng: {w1}, sai: {w2}",
-        f"{w1} / {w2}",
-    ]
-    tmpl = random.choice(templates)
-    extra = random.sample(singles, random.randint(2, 5))
-    text = tmpl + "  " + "  ".join(extra)
+    text = f"{w1}, {w2}"
     text = unique(text)
     if not text:
         return None
@@ -532,24 +343,12 @@ def gen_confusion_pair(confusion, singles, fonts, img_dir, idx, no_augment=False
 
 
 def gen_grouped_words(groups, fonts, img_dir, idx, no_augment=False):
-    keys = random.sample(list(groups.keys()), min(random.randint(2, 3), len(groups)))
-    words = []
-    for k in keys:
-        g = groups[k]
-        words += random.sample(g, min(random.randint(3, 7), len(g)))
+    """6-10 từ CÙNG 1 nhóm dấu (vd: chỉ 'ă' hoặc chỉ 'ê'). Tập trung 1 loại dấu."""
+    key = random.choice(list(groups.keys()))
+    g = groups[key]
+    words = random.sample(g, min(random.randint(6, 10), len(g)))
     random.shuffle(words)
-    text = "  ".join(words)
-    text = unique(text)
-    if not text:
-        return None
-    return make_result(text, idx, img_dir, fonts, no_augment)
-
-
-def gen_mixed_line(singles, phrases, fonts, img_dir, idx, no_augment=False):
-    phrase = random.choice(phrases)
-    words = random.sample(singles, random.randint(3, 6))
-    random.shuffle(words)
-    text = phrase + "\n" + "  ".join(words)
+    text = " ".join(words)
     text = unique(text)
     if not text:
         return None
@@ -557,10 +356,10 @@ def gen_mixed_line(singles, phrases, fonts, img_dir, idx, no_augment=False):
 
 
 def gen_dense_sentence(phrases, singles, fonts, img_dir, idx, no_augment=False):
-    sel = random.sample(phrases, random.randint(2, 3))
+    """5-8 cụm từ tiếng Việt, cách nhau bởi dấu phẩy. Nhiều cụm hơn phrase_list."""
+    sel = random.sample(phrases, min(random.randint(5, 8), len(phrases)))
     random.shuffle(sel)
-    extra = random.sample(singles, random.randint(2, 4))
-    text = ". ".join(sel) + ". " + " ".join(extra)
+    text = ", ".join(sel)
     text = unique(text)
     if not text:
         return None
@@ -568,12 +367,18 @@ def gen_dense_sentence(phrases, singles, fonts, img_dir, idx, no_augment=False):
 
 
 def gen_plain_words(singles, plain_singles, fonts, img_dir, idx, no_augment=False):
-    """Mix từ không dấu + có dấu để model học KHÔNG thêm dấu sai chỗ."""
-    n_plain = random.randint(3, 6)
+    """Mix từ English + VN không dấu + VN có dấu, cách nhau 1 dấu cách.
+
+    Dạy model: KHÔNG thêm dấu vào English hoặc VN không dấu.
+    Đây là generator quan trọng nhất để chống hallucination bias.
+    """
+    n_en = random.randint(2, 5)
+    n_plain_vn = random.randint(2, 4)
     n_diac = random.randint(2, 5)
-    plain = random.sample(plain_singles, min(n_plain, len(plain_singles)))
+    en = random.sample(ENGLISH_WORDS, min(n_en, len(ENGLISH_WORDS)))
+    plain_vn = random.sample(plain_singles, min(n_plain_vn, len(plain_singles)))
     diac = random.sample(singles, min(n_diac, len(singles)))
-    words = plain + diac
+    words = en + plain_vn + diac
     random.shuffle(words)
     text = " ".join(words)
     text = unique(text)
@@ -613,8 +418,8 @@ def main():
     parser.add_argument(
         "--num_train",
         type=int,
-        default=2000,
-        help="Số mẫu train (mặc định 2000)",
+        default=20000,
+        help="Số mẫu train (mặc định 20000 — giảm từ 50K, tăng chất lượng)",
     )
     parser.add_argument(
         "--num_test",
@@ -662,16 +467,16 @@ def main():
         ]
     else:
         generators = [
-            (lambda **kw: gen_word_list(singles, **kw), 10),  # từ đơn đã đủ cover
-            (lambda **kw: gen_phrase_list(phrases, **kw), 25),  # ↑ cụm từ
-            (lambda **kw: gen_confusion_pair(confusion, singles, **kw), 15),
-            (lambda **kw: gen_grouped_words(groups, **kw), 10),  # ↓ từ đơn dư
+            (lambda **kw: gen_word_list(singles, **kw), 10),
+            (lambda **kw: gen_phrase_list(phrases, **kw), 15),
+            (lambda **kw: gen_confusion_pair(confusion, singles, **kw), 20),  # ↑ cao nhất — fine discrimination
+            (lambda **kw: gen_grouped_words(groups, **kw), 10),
             (lambda **kw: gen_mixed_line(singles, phrases, **kw), 15),
             (
                 lambda **kw: gen_dense_sentence(phrases, singles, **kw),
-                25,
-            ),  # ↑ nhiều phrase/sample
-            (lambda **kw: gen_plain_words(singles, plain_singles, **kw), 10),  # chống bias thêm dấu
+                10,
+            ),  # ↓ từ 25%
+            (lambda **kw: gen_plain_words(singles, plain_singles, **kw), 20),  # ↑ từ 10% — anti-bias mạnh
         ]
 
     N_VAL = 100  # val cố định

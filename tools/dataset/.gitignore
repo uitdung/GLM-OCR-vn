@@ -1,0 +1,39 @@
+# ===== Dataset (đã sinh, nặng, không commit) =====
+data/vietnamese_ocr/
+data/vietnamese_ocr_s2/
+data/vietnamese_ocr_tables/
+data/vietnamese_ocr_v3/
+data/text_single_line/
+data/text_multi_line/
+data/table/
+data/cache_news_paragraphs.json
+data/vietnamese_ocr.zip
+data/vietnamese_ocr_s2.zip
+data/vietnamese_ocr_tables.zip
+data/*.zip
+
+# ===== Model được merge về local =====
+glm-ocr-vn/
+glm-ocr-vn-*/
+*-merged/
+checkpoints/
+checkpoint-*/
+
+# ===== LoRA adapter tải về =====
+adapter_model.safetensors
+adapter_config.json
+
+# ===== Python =====
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.ipynb_checkpoints/
+
+# ===== OS / tools =====
+.DS_Store
+Thumbs.db
+tools/output/
+
+**/.agents/**/*

@@ -13,7 +13,6 @@ import json
 import re
 import random
 import argparse
-import unicodedata
 import os
 import io
 import xml.etree.ElementTree as ET
@@ -21,10 +20,10 @@ from pathlib import Path
 from PIL import Image, ImageDraw, ImageFont, ImageFilter
 import numpy as np
 
-# Import fonts from existing generator
+# Import fonts from existing generator (cùng thư mục prepare/)
 import sys
 sys.path.insert(0, str(Path(__file__).parent))
-from generate_vietnamese_dataset_v3 import VERIFIED_FONTS, render
+from generate_stage1 import VERIFIED_FONTS, render
 
 HEADERS = {"User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"}
 
@@ -45,13 +44,6 @@ RSS_FEEDS = [
     "https://tuoitre.vn/rss/kinh-doanh.rss",
     "https://thanhnien.vn/rss/home.rss",
 ]
-
-
-def strip_vn(text):
-    """Bỏ TẤT CẢ dấu tiếng Việt → chỉ còn a-z."""
-    text = text.replace("đ", "d").replace("Đ", "D")
-    text = unicodedata.normalize("NFD", text)
-    return "".join(c for c in text if unicodedata.category(c) != "Mn")
 
 
 def fetch_rss(url):
@@ -139,11 +131,128 @@ def chunk_paragraphs(paragraphs, min_lines=2, max_lines=10, min_words_per_line=8
     return chunks
 
 
+CACHE_FILE = Path(__file__).resolve().parent.parent / "data" / "cache_news_paragraphs.json"
+
+
+def fetch_all_paragraphs(target, verbose=True, force_refresh=False):
+    """Crawl TẤT CẢ paragraphs từ báo → trả về list[str].
+
+    Có CACHE: lưu paragraphs ra data/cache_news_paragraphs.json để dùng lại.
+    - Lần đầu: fetch internet (chậm, ~30s)
+    - Các lần sau: load cache (nhanh, <0.5s) — không tốn mạng
+
+    Args:
+        target: số paragraph mục tiêu tối thiểu (crawl đến khi đủ hoặc hết feed).
+        force_refresh: True = bỏ qua cache, fetch lại internet.
+    """
+    # 1. Check cache
+    if not force_refresh and CACHE_FILE.exists():
+        if verbose:
+            print(f"📂 Load cache báo: {CACHE_FILE.name}")
+        try:
+            cached = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+            if verbose:
+                print(f"   ✓ {len(cached):,} paragraphs (cache hit)")
+            if len(cached) >= target:
+                return cached
+            if verbose:
+                print(f"   ⚠ Cache chỉ có {len(cached):,} < cần {target:,}, "
+                      f"fetch thêm...")
+        except Exception as e:
+            if verbose:
+                print(f"   ⚠ Cache lỗi ({e}), fetch lại internet")
+
+    # 2. Fetch internet
+    if verbose:
+        print(f"\n🌐 Crawling {len(RSS_FEEDS)} RSS feeds...")
+    all_article_urls = set()
+    for rss_url in RSS_FEEDS:
+        urls = fetch_rss(rss_url)
+        all_article_urls.update(urls)
+        if verbose:
+            print(f"  {rss_url.split('/')[2]}: {len(urls)} articles")
+    if verbose:
+        print(f"Total unique URLs: {len(all_article_urls)}")
+
+    if verbose:
+        print(f"\nFetching articles...")
+    all_paragraphs = []
+    fetched = 0
+    for url in list(all_article_urls):
+        paras = fetch_article(url)
+        all_paragraphs.extend(paras)
+        # Dedup paragraph-level (bỏ paragraph trùng)
+        all_paragraphs = list(dict.fromkeys(all_paragraphs))
+        fetched += 1
+        if verbose and fetched % 50 == 0:
+            print(f"  {fetched} articles → {len(all_paragraphs)} paragraphs")
+        if len(all_paragraphs) >= target:
+            break
+    if verbose:
+        print(f"\nCrawled: {fetched} articles, {len(all_paragraphs)} paragraphs")
+
+    # Merde với cache cũ (nếu có) để pool các lần fetch
+    if CACHE_FILE.exists():
+        try:
+            old = json.loads(CACHE_FILE.read_text(encoding="utf-8"))
+            combined = list(dict.fromkeys(all_paragraphs + old))
+            all_paragraphs = combined
+            if verbose:
+                print(f"Merged cache: {len(all_paragraphs):,} paragraphs "
+                      f"(+{len(old)} cũ)")
+        except Exception:
+            pass
+
+    # 3. Lưu cache
+    CACHE_FILE.parent.mkdir(parents=True, exist_ok=True)
+    CACHE_FILE.write_text(
+        json.dumps(all_paragraphs, ensure_ascii=False), encoding="utf-8")
+    if verbose:
+        sz = CACHE_FILE.stat().st_size / 1024
+        print(f"💾 Saved cache: {CACHE_FILE.name} "
+              f"({len(all_paragraphs):,} paragraphs, {sz:.0f} KB)")
+
+    return all_paragraphs
+
+
+def crawl_news_texts(num_texts, min_lines=2, max_lines=5, verbose=True,
+                     force_refresh=False):
+    """Crawl báo Việt → trả về list[str] (mỗi string = đoạn 2-5 dòng).
+
+    Hàm tái sử dụng: chỉ crawl+chunk, KHÔNG sinh ảnh / KHÔNG split.
+    Text mới báo GIỮ NGUYÊN dấu tiếng Việt (chuẩn).
+    Có CACHE paragraphs — không fetch lại internet nếu đã có dữ liệu.
+    Dùng cho text_multi_line source.
+
+    Args:
+        force_refresh: True = bỏ cache, fetch lại internet.
+
+    Returns:
+        list[str]: các đoạn text tiếng Việt chuẩn, giữ nguyên dấu.
+    """
+    # Lấy paragraphs từ cache (nhanh) hoặc internet (chậm lần đầu)
+    all_paragraphs = fetch_all_paragraphs(
+        target=num_texts * 3, verbose=verbose, force_refresh=force_refresh)
+
+    # Chunk thành nhiều dòng
+    chunks = chunk_paragraphs(all_paragraphs, min_lines=min_lines,
+                              max_lines=max_lines)
+    random.shuffle(chunks)
+    if verbose:
+        print(f"Chunks ({min_lines}-{max_lines} lines): {len(chunks)}")
+
+    # Giữ nguyên dấu tiếng Việt — KHÔNG strip (output phải là tiếng Việt chuẩn)
+    texts = chunks[:num_texts]
+    random.shuffle(texts)
+    if verbose:
+        print(f"Dataset texts: {len(texts)} (giữ nguyên dấu TV)")
+    return texts
+
+
 def main():
     parser = argparse.ArgumentParser(description="Vietnamese News Crawler for Stage 2")
-    parser.add_argument("--num_images", type=int, default=5000, help="Số ảnh cần gen")
-    parser.add_argument("--output", type=str, default="vietnamese_ocr_s2", help="Output dir")
-    parser.add_argument("--strip_ratio", type=float, default=0.3, help="Tỷ lệ strip dấu")
+    parser.add_argument("--num_images", type=int, default=15000, help="Số ảnh cần gen (tăng từ 10K→15K theo đề xuất tối ưu)")
+    parser.add_argument("--output", type=str, default="../data/vietnamese_ocr_s2", help="Output dir")
     parser.add_argument("--num_test", type=int, default=100)
     parser.add_argument("--num_val", type=int, default=50)
     parser.add_argument("--augment_copies", type=int, default=1, help="Số bản augment (1=không)")
@@ -190,21 +299,12 @@ def main():
     random.shuffle(chunks)
     print(f"Chunks (2-5 lines): {len(chunks)}")
 
-    # ── Strip dấu cho 30% ──
-    texts = []
-    for chunk in chunks:
-        stripped = strip_vn(chunk)
-        if stripped != chunk and random.random() < args.strip_ratio:
-            texts.append(stripped)
-        else:
-            texts.append(chunk)
-
-    # Trim to needed amount
+    # Giữ nguyên dấu tiếng Việt — KHÔNG strip
     total_needed = args.num_images + args.num_test + args.num_val
-    texts = texts[:total_needed]
+    texts = chunks[:total_needed]
     random.shuffle(texts)
 
-    print(f"Dataset: {len(texts)} texts (strip ratio {args.strip_ratio:.0%})")
+    print(f"Dataset: {len(texts)} texts (giữ nguyên dấu TV)")
 
     # ── Gen ảnh ──
     print(f"\nGenerating {len(texts)} base images...")
@@ -217,17 +317,22 @@ def main():
         bg = (255, 255, 255)
         img = render(text, fp, fs, bg)
 
-        # Light augmentation (40% none)
-        aug = random.choice(["none", "none", "blur", "noise", "jpeg", "rotate"])
+        # Light augmentation (65% clean — dấu TV cần chính xác)
+        aug = random.choice(["none", "none", "none", "none", "none",
+                             "none", "none", "none", "none", "none",
+                             "none", "none", "none",  # 65% clean
+                             "blur", "blur", "noise", "noise", "jpeg", "jpeg", "rotate"])
         if aug == "blur":
-            img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.8)))
+            img = img.filter(ImageFilter.GaussianBlur(radius=random.uniform(0.3, 0.6)))
         elif aug == "noise":
             arr = np.array(img)
-            n = np.random.randint(0, 20, arr.shape, dtype=np.uint8)
-            img = Image.fromarray(np.clip(arr.astype(int) + n.astype(int) - 10, 0, 255).astype(np.uint8))
+            intensity = random.randint(10, 25)  # thấp — dấu TV rất nhỏ
+            n = np.random.randint(0, intensity, arr.shape, dtype=np.uint8)
+            offset = intensity // 2
+            img = Image.fromarray(np.clip(arr.astype(int) + n.astype(int) - offset, 0, 255).astype(np.uint8))
         elif aug == "jpeg":
             buf = io.BytesIO()
-            img.save(buf, format="JPEG", quality=random.randint(60, 85))
+            img.save(buf, format="JPEG", quality=random.randint(65, 85))
             buf.seek(0)
             img = Image.open(buf).convert("RGB")
         elif aug == "rotate":
@@ -282,6 +387,7 @@ def main():
             json.dump(data, f, ensure_ascii=False)
 
     # Meta
+    # Meta
     with open(out / "meta.json", "w") as f:
         json.dump({
             "num_train": len(train_data),
@@ -290,7 +396,7 @@ def main():
             "total": len(dataset),
             "stage": 2,
             "source": "vn_news",
-            "strip_ratio": args.strip_ratio,
+            "strip_diacritics": False,
         }, f, indent=2)
 
     # Sample
